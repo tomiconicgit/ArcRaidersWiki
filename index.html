@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARC RAIDERS | Companion Hub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-orange: #ff6b00;
+            --bg-dark: #0a0a0b;
+            --text-light: #e0e0e0;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* Keeps the focus on the experience */
+            background-color: var(--bg-dark);
+            font-family: 'Rajdhani', sans-serif;
+            color: var(--text-light);
+        }
+
+        /* Container for Three.js background */
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Overlay UI */
+        .hero-overlay {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+            background: radial-gradient(circle, rgba(10,10,11,0.2) 0%, rgba(10,10,11,0.8) 100%);
+            padding: 0 20px;
+        }
+
+        .logo-container h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: clamp(2.5rem, 8vw, 5rem); /* Responsive font size */
+            letter-spacing: 12px;
+            margin: 0;
+            text-transform: uppercase;
+            color: #fff;
+            text-shadow: 0 0 20px rgba(255, 107, 0, 0.5);
+        }
+
+        .subtitle {
+            font-size: clamp(1rem, 3vw, 1.5rem);
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: var(--primary-orange);
+            margin-top: 10px;
+            opacity: 0.8;
+        }
+
+        /* Decorative scanline effect for that "Analog-Tech" look */
+        .scanline {
+            width: 100%;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.05);
+            position: absolute;
+            z-index: 3;
+            pointer-events: none;
+            animation: scan 4s linear infinite;
+        }
+
+        @keyframes scan {
+            0% { top: 0%; }
+            100% { top: 100%; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="scanline"></div>
+
+    <div id="canvas-container"></div>
+
+    <div class="hero-overlay">
+        <div class="logo-container">
+            <h1>ARC RAIDERS</h1>
+            <div class="subtitle">Tactical Database & Interactive Maps</div>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+          "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+          }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        
+        // This is where your Three.js logic will go.
+        // For now, it's a placeholder for your 3D modules.
+        console.log("Three.js ready for Arc Raiders project");
+    </script>
+</body>
+</html>
