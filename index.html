@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ARC RAIDERS | Companion Hub</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
-    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <style>
         :root {
             --primary-orange: #ff6b00;
@@ -13,6 +13,7 @@
             --text-light: #e0e0e0;
             --accent-blue: #00aaff;
             --card-bg: rgba(20, 20, 22, 0.8);
+            --highlight: rgba(255, 107, 0, 0.3);
         }
 
         body, html {
@@ -23,10 +24,9 @@
             background-color: var(--bg-dark);
             font-family: 'Rajdhani', sans-serif;
             color: var(--text-light);
-            overflow-x: hidden; /* Prevent horizontal scroll */
+            overflow-x: hidden;
         }
 
-        /* Container for Three.js background - fixed position */
         #canvas-container {
             position: fixed;
             top: 0;
@@ -36,14 +36,12 @@
             z-index: 1;
         }
 
-        /* Main content container - allows scrolling */
         #main-content {
             position: relative;
             z-index: 2;
             background: linear-gradient(to bottom, rgba(10,10,11,0.9) 0%, rgba(10,10,11,0.7) 100%);
         }
 
-        /* Hero Overlay */
         .hero-overlay {
             display: flex;
             flex-direction: column;
@@ -62,6 +60,12 @@
             text-transform: uppercase;
             color: #fff;
             text-shadow: 0 0 20px rgba(255, 107, 0, 0.5);
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from { text-shadow: 0 0 10px rgba(255, 107, 0, 0.3); }
+            to { text-shadow: 0 0 30px rgba(255, 107, 0, 0.7); }
         }
 
         .subtitle {
@@ -73,7 +77,6 @@
             opacity: 0.8;
         }
 
-        /* Navigation Bar */
         nav {
             position: sticky;
             top: 0;
@@ -99,14 +102,14 @@
             font-size: clamp(1rem, 2.5vw, 1.2rem);
             text-transform: uppercase;
             letter-spacing: 2px;
-            transition: color 0.3s;
+            transition: color 0.3s, transform 0.3s;
         }
 
         nav a:hover {
             color: var(--primary-orange);
+            transform: scale(1.1);
         }
 
-        /* Sections */
         section {
             padding: 60px 20px;
             max-width: 1200px;
@@ -121,6 +124,12 @@
             letter-spacing: 4px;
             margin-bottom: 30px;
             text-align: center;
+            animation: fadeIn 1s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .content-grid {
@@ -131,15 +140,16 @@
 
         .card {
             background: var(--card-bg);
-            border: 1px solid rgba(255, 107, 0, 0.2);
+            border: 1px solid var(--highlight);
             padding: 20px;
             border-radius: 8px;
             transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
         }
 
         .card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 5px 15px rgba(255, 107, 0, 0.3);
+            box-shadow: 0 5px 15px var(--highlight);
         }
 
         .card h3 {
@@ -153,20 +163,56 @@
             line-height: 1.5;
         }
 
-        /* Interactive Map Placeholder */
-        #map-placeholder {
+        /* Interactive Map Styles */
+        .map-container {
             height: 500px;
-            background: #1a1a1c;
             border: 2px solid var(--primary-orange);
             border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.5rem;
-            color: var(--text-light);
+            margin-bottom: 20px;
         }
 
-        /* Decorative scanline effect */
+        .map-selector {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .map-selector button {
+            background: var(--card-bg);
+            border: 1px solid var(--primary-orange);
+            color: var(--text-light);
+            padding: 10px 20px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .map-selector button:hover {
+            background: var(--primary-orange);
+            color: var(--bg-dark);
+        }
+
+        /* Recipe Tracker */
+        .recipe-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .recipe-item {
+            background: var(--card-bg);
+            padding: 15px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .recipe-item input[type="checkbox"] {
+            margin-left: 10px;
+        }
+
+        /* Scanline */
         .scanline {
             width: 100%;
             height: 2px;
@@ -182,7 +228,7 @@
             100% { top: 100%; }
         }
 
-        /* Mobile Responsiveness */
+        /* Mobile */
         @media (max-width: 768px) {
             nav ul {
                 flex-direction: column;
@@ -210,8 +256,9 @@
             <ul>
                 <li><a href="#home">Home</a></li>
                 <li><a href="#maps">Maps</a></li>
-                <li><a href="#tips">Tips</a></li>
+                <li><a href="#recipes">Recipes</a></li>
                 <li><a href="#database">Database</a></li>
+                <li><a href="#tips">Tips</a></li>
                 <li><a href="#community">Community</a></li>
             </ul>
         </nav>
@@ -219,14 +266,51 @@
         <section id="home" class="hero-overlay">
             <div class="logo-container">
                 <h1>ARC RAIDERS</h1>
-                <div class="subtitle">Tactical Database & Interactive Maps</div>
+                <div class="subtitle">Ultimate Companion Hub: Maps, Recipes, Tips & More</div>
             </div>
         </section>
 
         <section id="maps">
             <h2>Interactive Maps</h2>
-            <div id="map-placeholder">Interactive 3D Map Coming Soon (Powered by Three.js)</div>
-            <p style="text-align: center; margin-top: 20px;">Explore detailed maps of raid zones, extraction points, and enemy spawns. Zoom, rotate, and interact on both PC and mobile.</p>
+            <div class="map-selector">
+                <button onclick="loadMap('dam')">Dam Battlegrounds</button>
+                <button onclick="loadMap('bluegate')">Blue Gate</button>
+                <button onclick="loadMap('buriedcity')">Buried City</button>
+                <button onclick="loadMap('spaceport')">Spaceport</button>
+                <button onclick="loadMap('stellamontis')">Stella Montis</button>
+            </div>
+            <div id="map" class="map-container"></div>
+            <p>Zoom and pan the map to explore loot locations, spawns, extraction points, and tips. Markers provide details on hover.</p>
+        </section>
+
+        <section id="recipes">
+            <h2>Recipe & Blueprint Tracker</h2>
+            <div class="recipe-list" id="recipe-list"></div>
+            <button onclick="saveProgress()">Save Progress</button>
+            <button onclick="resetProgress()">Reset</button>
+            <p>Check off blueprints you have unlocked. Track materials needed for crafting weapons, gadgets, and more.</p>
+        </section>
+
+        <section id="database">
+            <h2>Item Database</h2>
+            <div class="content-grid">
+                <div class="card">
+                    <h3>Weapons</h3>
+                    <p>Anvil, Bobcat, Burletta, and more. View stats, attachments, and crafting requirements.</p>
+                </div>
+                <div class="card">
+                    <h3>Materials</h3>
+                    <p>Mechanical Components, Duct Tape, Wires, etc. Find spawn locations and uses.</p>
+                </div>
+                <div class="card">
+                    <h3>Enemies</h3>
+                    <p>ARC Drones, Enforcers, Matriarch, Queen. Weaknesses and spawn areas.</p>
+                </div>
+                <div class="card">
+                    <h3>Gadgets</h3>
+                    <p>Barricade Kit, Defibrillator, Mines, Grenades. Utility items for survival.</p>
+                </div>
+            </div>
         </section>
 
         <section id="tips">
@@ -234,40 +318,26 @@
             <div class="content-grid">
                 <div class="card">
                     <h3>Survival Basics</h3>
-                    <p>Always scan for ARC units before engaging. Use cover wisely and prioritize extraction over kills.</p>
+                    <p>Scan for ARC before engaging. Use cover, prioritize extraction. Farm hidden caches for blueprints.</p>
                 </div>
                 <div class="card">
-                    <h3>Weapon Loadouts</h3>
-                    <p>Balance your kit with a mix of close-range and long-range weapons. Mods can make or break a raid.</p>
+                    <h3>Blueprint Farming</h3>
+                    <p>Focus on high-value areas like relay stations on Dam. Join Harvester events for rare drops.</p>
                 </div>
                 <div class="card">
-                    <h3>Team Coordination</h3>
-                    <p>Communicate spawn locations and share resources. Flanking maneuvers work best against larger threats.</p>
-                </div>
-            </div>
-        </section>
-
-        <section id="database">
-            <h2>Raider Database</h2>
-            <div class="content-grid">
-                <div class="card">
-                    <h3>Enemy Types</h3>
-                    <p>From basic drones to elite enforcers – learn weaknesses and attack patterns.</p>
+                    <h3>Team Play</h3>
+                    <p>Coordinate flanks against ARC. Share resources and use lure grenades to distract enemies.</p>
                 </div>
                 <div class="card">
-                    <h3>Gear & Items</h3>
-                    <p>Detailed stats on weapons, armor, and consumables.</p>
-                </div>
-                <div class="card">
-                    <h3>Lore Entries</h3>
-                    <p>Deep dive into the post-apocalyptic world of ARC Raiders.</p>
+                    <h3>Extraction Tips</h3>
+                    <p>Use Raider Hatches for safe exits but balance with costs. Avoid high-traffic standard points.</p>
                 </div>
             </div>
         </section>
 
         <section id="community">
             <h2>Community Hub</h2>
-            <p>Join discussions, share your raids, and contribute to the wiki. Integration with forums and user submissions coming soon.</p>
+            <p>Join discussions, share raids, contribute tips. Future integrations with forums and user submissions.</p>
         </section>
     </div>
 
@@ -279,34 +349,31 @@
         }
     </script>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
     <script type="module">
         import * as THREE from 'three';
 
-        // Scene setup
+        // Three.js Background (engine.js equivalent)
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-        // Basic ambient light
         const ambientLight = new THREE.AmbientLight(0x404040, 1);
         scene.add(ambientLight);
 
-        // Directional light for depth
         const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
         directionalLight.position.set(5, 5, 5);
         scene.add(directionalLight);
 
-        // Particle system for sci-fi stars/nebula effect
         const particlesGeometry = new THREE.BufferGeometry();
         const particlesCount = 5000;
         const posArray = new Float32Array(particlesCount * 3);
-
         for (let i = 0; i < particlesCount * 3; i++) {
             posArray[i] = (Math.random() - 0.5) * 2000;
         }
-
         particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
 
         const particlesMaterial = new THREE.PointsMaterial({
@@ -322,26 +389,120 @@
 
         camera.position.z = 5;
 
-        // Animation loop
         function animate() {
             requestAnimationFrame(animate);
-
-            // Slow rotation for dynamic background
             particlesMesh.rotation.y += 0.0002;
-
             renderer.render(scene, camera);
         }
 
         animate();
 
-        // Handle resize for responsiveness
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        console.log("Three.js sci-fi background initialized for Arc Raiders Companion Hub");
+        // Maps Module (maps.js)
+        let map;
+        const mapsData = {
+            dam: {
+                image: 'https://egamersworld.com/cdn-cgi/image/width=690,quality=75,format=webp/uploads/content/1/17/1762686095198_resized.png',
+                bounds: [[0, 0], [418, 690]],
+                markers: [
+                    { pos: [200, 300], popup: 'Hydroponic Dome: High Loot - Weapons & Blueprints' },
+                    { pos: [150, 400], popup: 'Control Tower: ARC Spawns, Rare Materials' },
+                    { pos: [250, 500], popup: 'Research Building: Extraction Point Nearby' }
+                ]
+            },
+            bluegate: {
+                image: 'https://www.pcgamesn.com/wp-content/sites/pcgamesn/2025/10/arc-raiders-map-blue-gate.jpg',
+                bounds: [[0, 0], [1080, 1920]],
+                markers: [
+                    { pos: [500, 900], popup: 'Pilgrim’s Peak: High Value Caches' },
+                    { pos: [600, 1000], popup: 'Checkpoint: Key Rooms, Blueprints' }
+                ]
+            },
+            buriedcity: {
+                image: 'https://example.com/buriedcity.jpg', // Placeholder
+                bounds: [[0, 0], [1000, 1000]],
+                markers: [
+                    { pos: [400, 500], popup: 'Space Travel Hub: Loot Hotspot' }
+                ]
+            },
+            spaceport: {
+                image: 'https://example.com/spaceport.jpg', // Placeholder
+                bounds: [[0, 0], [1000, 1000]],
+                markers: [
+                    { pos: [300, 400], popup: 'Launch Towers: Rare Drops' }
+                ]
+            },
+            stellamontis: {
+                image: 'https://example.com/stellamontis.jpg', // Placeholder
+                bounds: [[0, 0], [1000, 1000]],
+                markers: [
+                    { pos: [500, 500], popup: 'Seed Vault: Materials Farm' }
+                ]
+            }
+        };
+
+        window.loadMap = function(mapName) {
+            if (map) map.remove();
+            const data = mapsData[mapName];
+            map = L.map('map', { crs: L.CRS.Simple, minZoom: -1 });
+            const bounds = L.latLngBounds(data.bounds);
+            L.imageOverlay(data.image, bounds).addTo(map);
+            map.fitBounds(bounds);
+
+            data.markers.forEach(marker => {
+                L.marker(marker.pos).addTo(map).bindPopup(marker.popup);
+            });
+        };
+
+        // Load default map
+        loadMap('dam');
+
+        // Recipes Module (recipe.js)
+        const blueprints = [
+            { name: 'Anvil', materials: '5 Mechanical Components, 5 Simple Gun Parts', location: 'Random Drop in High Loot Areas' },
+            { name: 'Bobcat', materials: '1 Magnetic Accelerator, 3 Light Gun Parts, 2 Exodus Modules', location: 'Random Drop' },
+            { name: 'Burletta', materials: '3 Mechanical Components, 3 Simple Gun Parts', location: 'Industrial Espionage Quest' },
+            // Add more from the list...
+            { name: 'Aphelion', materials: '3 Magnetic Accelerators, 3 Complex Gun Parts, 1 Matriarch Reactor', location: 'Defeat Matriarch' },
+            // Truncated for brevity; add all 75 as needed
+        ];
+
+        function renderRecipes() {
+            const list = document.getElementById('recipe-list');
+            list.innerHTML = '';
+            blueprints.forEach((bp, index) => {
+                const item = document.createElement('div');
+                item.className = 'recipe-item';
+                item.innerHTML = `
+                    <span>${bp.name} - Materials: ${bp.materials} (Location: ${bp.location})</span>
+                    <input type="checkbox" id="bp-${index}" ${localStorage.getItem(`bp-${index}`) === 'true' ? 'checked' : ''} onchange="updateProgress(${index})">
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        window.updateProgress = function(index) {
+            const checkbox = document.getElementById(`bp-${index}`);
+            localStorage.setItem(`bp-${index}`, checkbox.checked);
+        };
+
+        window.saveProgress = function() {
+            alert('Progress saved to local storage!');
+        };
+
+        window.resetProgress = function() {
+            localStorage.clear();
+            renderRecipes();
+        };
+
+        renderRecipes();
+
+        console.log("ARC Raiders Companion Hub Initialized");
     </script>
 </body>
 </html>
