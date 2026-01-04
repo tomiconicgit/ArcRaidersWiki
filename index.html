@@ -4,22 +4,272 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ARC RAIDERS | Companion Hub</title>
-    <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-orange: #ff6b00;
+            --bg-dark: #0a0a0b;
+            --text-light: #e0e0e0;
+            --accent-blue: #00aaff;
+            --card-bg: rgba(20, 20, 22, 0.8);
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-dark);
+            font-family: 'Rajdhani', sans-serif;
+            color: var(--text-light);
+            overflow-x: hidden; /* Prevent horizontal scroll */
+        }
+
+        /* Container for Three.js background - fixed position */
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Main content container - allows scrolling */
+        #main-content {
+            position: relative;
+            z-index: 2;
+            background: linear-gradient(to bottom, rgba(10,10,11,0.9) 0%, rgba(10,10,11,0.7) 100%);
+        }
+
+        /* Hero Overlay */
+        .hero-overlay {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+            padding: 0 20px;
+        }
+
+        .logo-container h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: clamp(2.5rem, 8vw, 5rem);
+            letter-spacing: 12px;
+            margin: 0;
+            text-transform: uppercase;
+            color: #fff;
+            text-shadow: 0 0 20px rgba(255, 107, 0, 0.5);
+        }
+
+        .subtitle {
+            font-size: clamp(1rem, 3vw, 1.5rem);
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: var(--primary-orange);
+            margin-top: 10px;
+            opacity: 0.8;
+        }
+
+        /* Navigation Bar */
+        nav {
+            position: sticky;
+            top: 0;
+            background-color: var(--bg-dark);
+            padding: 15px 20px;
+            display: flex;
+            justify-content: center;
+            z-index: 10;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        nav ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            gap: clamp(1rem, 4vw, 2rem);
+        }
+
+        nav a {
+            color: var(--text-light);
+            text-decoration: none;
+            font-size: clamp(1rem, 2.5vw, 1.2rem);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: color 0.3s;
+        }
+
+        nav a:hover {
+            color: var(--primary-orange);
+        }
+
+        /* Sections */
+        section {
+            padding: 60px 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        section h2 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: clamp(1.8rem, 5vw, 2.5rem);
+            color: var(--primary-orange);
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid rgba(255, 107, 0, 0.2);
+            padding: 20px;
+            border-radius: 8px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(255, 107, 0, 0.3);
+        }
+
+        .card h3 {
+            font-size: 1.2rem;
+            color: var(--accent-blue);
+            margin-bottom: 10px;
+        }
+
+        .card p {
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+
+        /* Interactive Map Placeholder */
+        #map-placeholder {
+            height: 500px;
+            background: #1a1a1c;
+            border: 2px solid var(--primary-orange);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: var(--text-light);
+        }
+
+        /* Decorative scanline effect */
+        .scanline {
+            width: 100%;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.05);
+            position: absolute;
+            z-index: 3;
+            pointer-events: none;
+            animation: scan 4s linear infinite;
+        }
+
+        @keyframes scan {
+            0% { top: 0%; }
+            100% { top: 100%; }
+        }
+
+        /* Mobile Responsiveness */
+        @media (max-width: 768px) {
+            nav ul {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            section {
+                padding: 40px 15px;
+            }
+
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
 
     <div class="scanline"></div>
+
     <div id="canvas-container"></div>
 
-    <main class="hero-overlay">
-        <header class="logo-container">
-            <h1>ARC RAIDERS</h1>
-            <div class="subtitle">Tactical Database & Interactive Maps</div>
-        </header>
-        
-        <nav id="main-nav"></nav>
-    </main>
+    <div id="main-content">
+        <nav>
+            <ul>
+                <li><a href="#home">Home</a></li>
+                <li><a href="#maps">Maps</a></li>
+                <li><a href="#tips">Tips</a></li>
+                <li><a href="#database">Database</a></li>
+                <li><a href="#community">Community</a></li>
+            </ul>
+        </nav>
+
+        <section id="home" class="hero-overlay">
+            <div class="logo-container">
+                <h1>ARC RAIDERS</h1>
+                <div class="subtitle">Tactical Database & Interactive Maps</div>
+            </div>
+        </section>
+
+        <section id="maps">
+            <h2>Interactive Maps</h2>
+            <div id="map-placeholder">Interactive 3D Map Coming Soon (Powered by Three.js)</div>
+            <p style="text-align: center; margin-top: 20px;">Explore detailed maps of raid zones, extraction points, and enemy spawns. Zoom, rotate, and interact on both PC and mobile.</p>
+        </section>
+
+        <section id="tips">
+            <h2>Pro Tips & Strategies</h2>
+            <div class="content-grid">
+                <div class="card">
+                    <h3>Survival Basics</h3>
+                    <p>Always scan for ARC units before engaging. Use cover wisely and prioritize extraction over kills.</p>
+                </div>
+                <div class="card">
+                    <h3>Weapon Loadouts</h3>
+                    <p>Balance your kit with a mix of close-range and long-range weapons. Mods can make or break a raid.</p>
+                </div>
+                <div class="card">
+                    <h3>Team Coordination</h3>
+                    <p>Communicate spawn locations and share resources. Flanking maneuvers work best against larger threats.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="database">
+            <h2>Raider Database</h2>
+            <div class="content-grid">
+                <div class="card">
+                    <h3>Enemy Types</h3>
+                    <p>From basic drones to elite enforcers – learn weaknesses and attack patterns.</p>
+                </div>
+                <div class="card">
+                    <h3>Gear & Items</h3>
+                    <p>Detailed stats on weapons, armor, and consumables.</p>
+                </div>
+                <div class="card">
+                    <h3>Lore Entries</h3>
+                    <p>Deep dive into the post-apocalyptic world of ARC Raiders.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="community">
+            <h2>Community Hub</h2>
+            <p>Join discussions, share your raids, and contribute to the wiki. Integration with forums and user submissions coming soon.</p>
+        </section>
+    </div>
 
     <script type="importmap">
         {
@@ -29,6 +279,69 @@
         }
     </script>
 
-    <script type="module" src="js/main.js"></script>
+    <script type="module">
+        import * as THREE from 'three';
+
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // Basic ambient light
+        const ambientLight = new THREE.AmbientLight(0x404040, 1);
+        scene.add(ambientLight);
+
+        // Directional light for depth
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        // Particle system for sci-fi stars/nebula effect
+        const particlesGeometry = new THREE.BufferGeometry();
+        const particlesCount = 5000;
+        const posArray = new Float32Array(particlesCount * 3);
+
+        for (let i = 0; i < particlesCount * 3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 2000;
+        }
+
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+
+        const particlesMaterial = new THREE.PointsMaterial({
+            size: 0.5,
+            color: 0xffffff,
+            blending: THREE.AdditiveBlending,
+            transparent: true,
+            depthWrite: false
+        });
+
+        const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(particlesMesh);
+
+        camera.position.z = 5;
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Slow rotation for dynamic background
+            particlesMesh.rotation.y += 0.0002;
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        // Handle resize for responsiveness
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        console.log("Three.js sci-fi background initialized for Arc Raiders Companion Hub");
+    </script>
 </body>
 </html>
