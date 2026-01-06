@@ -1,170 +1,287 @@
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import GUI from 'three/addons/libs/lil-gui.module.min.js';
 
-// --- CONFIGURATION ---
-const PARTICLE_COUNT = 15000;
-const GALAXY_RADIUS = 30;
-const BRANCHES = 3;
-const SPIN_CURVE = 1;
-const RANDOMNESS = 0.5;
-const RANDOMNESS_POWER = 3;
+/**
+ * --- SHADERS (GLSL) ---
+ * We write these as strings to avoid loading external files.
+ * This runs on the Graphics Card (GPU) for maximum performance.
+ */
 
-// --- STATE ---
-const mouse = new THREE.Vector2();
-const targetRotation = new THREE.Vector2();
-let warpActive = false;
-let time = 0;
+const vertexShader = `
+    uniform float uTime;
+    uniform float uSize;
+    uniform float uExplosion;
+    attribute float aScale;
+    attribute vec3 aRandomness;
+    
+    varying vec3 vColor;
 
-// --- SCENE SETUP ---
+    void main() {
+        // Base Position
+        vec4 modelPosition = modelMatrix * vec4(position, 1.0);
+        
+        // Spin Effect based on distance from center
+        float angle = atan(modelPosition.x, modelPosition.z);
+        float distanceToCenter = length(modelPosition.xz);
+        float angleOffset = (1.0 / distanceToCenter) * uTime * 0.2;
+        
+        // Apply rotation
+        angle += angleOffset;
+        modelPosition.x = cos(angle) * distanceToCenter;
+        modelPosition.z = sin(angle) * distanceToCenter;
+
+        // Wave effect (breathing)
+        modelPosition.y += sin(uTime + distanceToCenter) * 0.2;
+
+        // Explosion Effect (User Interaction)
+        vec3 explosionDirection = normalize(modelPosition.xyz);
+        modelPosition.xyz += explosionDirection * uExplosion * aRandomness.x * 5.0;
+
+        vec4 viewPosition = viewMatrix * modelPosition;
+        vec4 projectedPosition = projectionMatrix * viewPosition;
+        gl_Position = projectedPosition;
+
+        // Size attenuation (particles get smaller when far away)
+        gl_PointSize = uSize * aScale;
+        gl_PointSize *= (1.0 / -viewPosition.z);
+
+        // Send color to fragment shader
+        vColor = color;
+    }
+`;
+
+const fragmentShader = `
+    varying vec3 vColor;
+
+    void main() {
+        // Make the particle circular
+        float strength = distance(gl_PointCoord, vec2(0.5));
+        strength = 1.0 - strength;
+        strength = pow(strength, 10.0);
+
+        // Final color mix
+        vec3 finalColor = mix(vec3(0.0), vColor, strength);
+        gl_FragColor = vec4(finalColor, 1.0);
+    }
+`;
+
+// --- SETUP ---
+const canvas = document.querySelector('canvas');
+const loading = document.getElementById('loading');
+
+// Scene
 const scene = new THREE.Scene();
-// Add a subtle fog for depth
-scene.fog = new THREE.FogExp2(0x000000, 0.03);
 
+// Camera
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.z = 8;
-camera.position.y = 4;
-camera.lookAt(0, 0, 0);
+camera.position.set(0, 6, 8);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+// Renderer
+const renderer = new THREE.WebGLRenderer({ antialias: false }); // Antialias off for performance with post-processing
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ReinhardToneMapping;
 document.body.appendChild(renderer.domElement);
 
-// --- GEOMETRY GENERATION ---
-const geometry = new THREE.BufferGeometry();
-const positions = new Float32Array(PARTICLE_COUNT * 3);
-const colors = new Float32Array(PARTICLE_COUNT * 3);
-const originalPositions = new Float32Array(PARTICLE_COUNT * 3); // To remember structure during warp
+// Controls (Touch Friendly)
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.enableZoom = true;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.5;
 
-const colorInside = new THREE.Color('#ff6030');
-const colorOutside = new THREE.Color('#1b3984');
+// --- GALAXY GENERATOR ---
+const parameters = {
+    count: 30000,          // High particle count for "Advanced" feel
+    size: 30,
+    radius: 7,
+    branches: 3,
+    spin: 1,
+    randomness: 0.2,
+    randomnessPower: 3,
+    insideColor: '#ff6030',
+    outsideColor: '#1b3984',
+    explosionTrigger: 0 // Used for animation
+};
 
-for (let i = 0; i < PARTICLE_COUNT; i++) {
-    const i3 = i * 3;
+let geometry = null;
+let material = null;
+let points = null;
 
-    // Position along the radius
-    const radius = Math.random() * GALAXY_RADIUS;
+const generateGalaxy = () => {
+    if (points !== null) {
+        geometry.dispose();
+        material.dispose();
+        scene.remove(points);
+    }
+
+    geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(parameters.count * 3);
+    const colors = new Float32Array(parameters.count * 3);
+    const scales = new Float32Array(parameters.count * 1);
+    const randomnessAttr = new Float32Array(parameters.count * 3);
+
+    const colorInside = new THREE.Color(parameters.insideColor);
+    const colorOutside = new THREE.Color(parameters.outsideColor);
+
+    for (let i = 0; i < parameters.count; i++) {
+        const i3 = i * 3;
+
+        // Radius
+        const radius = Math.random() * parameters.radius;
+
+        // Branches
+        const spinAngle = radius * parameters.spin;
+        const branchAngle = (i % parameters.branches) / parameters.branches * Math.PI * 2;
+
+        const randomX = Math.pow(Math.random(), parameters.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * parameters.randomness * radius;
+        const randomY = Math.pow(Math.random(), parameters.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * parameters.randomness * radius;
+        const randomZ = Math.pow(Math.random(), parameters.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * parameters.randomness * radius;
+
+        positions[i3] = Math.cos(branchAngle + spinAngle) * radius + randomX;
+        positions[i3 + 1] = randomY;
+        positions[i3 + 2] = Math.sin(branchAngle + spinAngle) * radius + randomZ;
+
+        // Randomness (stored for explosion effect)
+        randomnessAttr[i3] = Math.random();
+        randomnessAttr[i3+1] = Math.random();
+        randomnessAttr[i3+2] = Math.random();
+
+        // Color
+        const mixedColor = colorInside.clone();
+        mixedColor.lerp(colorOutside, radius / parameters.radius);
+
+        colors[i3] = mixedColor.r;
+        colors[i3 + 1] = mixedColor.g;
+        colors[i3 + 2] = mixedColor.b;
+
+        // Scale (randomize size)
+        scales[i] = Math.random();
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('aScale', new THREE.BufferAttribute(scales, 1));
+    geometry.setAttribute('aRandomness', new THREE.BufferAttribute(randomnessAttr, 3));
+
+    // Shader Material
+    material = new THREE.ShaderMaterial({
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexColors: true,
+        vertexShader: vertexShader,
+        fragmentShader: fragmentShader,
+        uniforms: {
+            uTime: { value: 0 },
+            uSize: { value: parameters.size * renderer.getPixelRatio() },
+            uExplosion: { value: 0 }
+        }
+    });
+
+    points = new THREE.Points(geometry, material);
+    scene.add(points);
     
-    // Angle for the spiral arms
-    const spinAngle = radius * SPIN_CURVE;
-    const branchAngle = (i % BRANCHES) / BRANCHES * Math.PI * 2;
+    // Hide loading screen once generated
+    loading.style.opacity = 0;
+};
+
+generateGalaxy();
+
+// --- POST PROCESSING (BLOOM) ---
+const renderScene = new RenderPass(scene, camera);
+
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+bloomPass.threshold = 0;
+bloomPass.strength = 1.2; // Intensity of the glow
+bloomPass.radius = 0;
+
+const composer = new EffectComposer(renderer);
+composer.addPass(renderScene);
+composer.addPass(bloomPass);
+
+// --- GUI CONTROL PANEL ---
+const gui = new GUI({ title: 'Control Panel' });
+gui.close(); // Closed by default on mobile
+gui.add(parameters, 'count').min(1000).max(100000).step(100).onFinishChange(generateGalaxy).name('Particle Count');
+gui.add(parameters, 'radius').min(0.01).max(20).step(0.01).onFinishChange(generateGalaxy);
+gui.add(parameters, 'branches').min(2).max(20).step(1).onFinishChange(generateGalaxy);
+gui.add(parameters, 'spin').min(-5).max(5).step(0.001).onFinishChange(generateGalaxy);
+gui.addColor(parameters, 'insideColor').onFinishChange(generateGalaxy);
+gui.addColor(parameters, 'outsideColor').onFinishChange(generateGalaxy);
+gui.add(bloomPass, 'strength').min(0).max(3).step(0.01).name('Glow Strength');
+
+// --- INTERACTION ---
+let isExploding = false;
+
+// Raycaster for advanced touch interaction
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+
+function onPointerMove( event ) {
+    // Handle both mouse and touch
+    let x, y;
+    if(event.changedTouches) {
+        x = event.changedTouches[0].clientX;
+        y = event.changedTouches[0].clientY;
+    } else {
+        x = event.clientX;
+        y = event.clientY;
+    }
     
-    // Randomness for scattering
-    const randomX = Math.pow(Math.random(), RANDOMNESS_POWER) * (Math.random() < 0.5 ? 1 : -1) * RANDOMNESS * radius;
-    const randomY = Math.pow(Math.random(), RANDOMNESS_POWER) * (Math.random() < 0.5 ? 1 : -1) * RANDOMNESS * radius;
-    const randomZ = Math.pow(Math.random(), RANDOMNESS_POWER) * (Math.random() < 0.5 ? 1 : -1) * RANDOMNESS * radius;
-
-    // Final positions
-    positions[i3] = Math.cos(branchAngle + spinAngle) * radius + randomX;
-    positions[i3 + 1] = randomY; // Flattened disk on Y axis
-    positions[i3 + 2] = Math.sin(branchAngle + spinAngle) * radius + randomZ;
-
-    // Store original for warp effect math
-    originalPositions[i3] = positions[i3];
-    originalPositions[i3+1] = positions[i3+1];
-    originalPositions[i3+2] = positions[i3+2];
-
-    // Color mixing
-    const mixedColor = colorInside.clone();
-    mixedColor.lerp(colorOutside, radius / GALAXY_RADIUS);
-
-    colors[i3] = mixedColor.r;
-    colors[i3 + 1] = mixedColor.g;
-    colors[i3 + 2] = mixedColor.b;
+	pointer.x = ( x / window.innerWidth ) * 2 - 1;
+	pointer.y = - ( y / window.innerHeight ) * 2 + 1;
 }
 
-geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-// --- MATERIAL ---
-// We use additive blending to make overlapping particles glow
-const material = new THREE.PointsMaterial({
-    size: 0.05,
-    sizeAttenuation: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    vertexColors: true
-});
-
-const particles = new THREE.Points(geometry, material);
-scene.add(particles);
-
-// --- INTERACTION LISTENERS ---
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-});
-
-window.addEventListener('mousemove', (event) => {
-    // Normalize mouse from -1 to 1
-    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-});
-
-window.addEventListener('click', () => {
-    warpActive = !warpActive;
-});
+// Double tap/click to explode
+window.addEventListener('dblclick', () => { isExploding = true; });
 
 // --- ANIMATION LOOP ---
 const clock = new THREE.Clock();
 
-function tick() {
+const tick = () => {
     const elapsedTime = clock.getElapsedTime();
-    const deltaTime = clock.getDelta();
 
-    // 1. ROTATION PHYSICS
-    // Base rotation + Mouse X influence
-    const rotationSpeed = 0.05 + (mouse.x * 0.1); 
-    particles.rotation.y = elapsedTime * rotationSpeed;
-
-    // 2. COLOR SHIFT
-    // Mouse Y influences the particle size slightly to create a "pulsing" effect
-    material.size = 0.05 + (Math.abs(mouse.y) * 0.05);
-
-    // 3. WARP DRIVE EFFECT
-    const positionAttribute = geometry.attributes.position;
-    
-    for(let i = 0; i < PARTICLE_COUNT; i++) {
-        const i3 = i * 3;
-        const x = originalPositions[i3];
-        const y = originalPositions[i3 + 1];
-        const z = originalPositions[i3 + 2];
-
-        if (warpActive) {
-            // Stretch particles along the Z axis based on their distance from center
-            // This creates a "Star Wars" hyperspace look
-            positionAttribute.array[i3 + 1] = y + Math.sin(elapsedTime * 10 + x) * 0.5; // Jitter Y
-            positionAttribute.array[i3 + 2] = z + (x * 20); // Stretch Z
-            
-            // Camera shake
-            camera.position.x += (Math.random() - 0.5) * 0.02;
-            camera.position.y += (Math.random() - 0.5) * 0.02;
+    // Update Shader Uniforms
+    if(material) {
+        material.uniforms.uTime.value = elapsedTime;
+        
+        // Handle Explosion Logic
+        if(isExploding) {
+            material.uniforms.uExplosion.value += 0.05; // Expand
+            if(material.uniforms.uExplosion.value > 2.0) isExploding = false; // Reset trigger
         } else {
-            // Return to normal shape smoothly
-            // Linear interpolation (Lerp) back to original
-            positionAttribute.array[i3] = x;
-            positionAttribute.array[i3 + 1] = THREE.MathUtils.lerp(positionAttribute.array[i3 + 1], y, 0.1);
-            positionAttribute.array[i3 + 2] = THREE.MathUtils.lerp(positionAttribute.array[i3 + 2], z, 0.1);
+            // Smoothly return to 0
+            material.uniforms.uExplosion.value = THREE.MathUtils.lerp(material.uniforms.uExplosion.value, 0, 0.05);
         }
     }
-    positionAttribute.needsUpdate = true;
 
-    // 4. CAMERA MOVEMENT
-    if (warpActive) {
-        // Zoom out drastically
-        camera.position.z = THREE.MathUtils.lerp(camera.position.z, 2, 0.02);
-        camera.fov = THREE.MathUtils.lerp(camera.fov, 100, 0.02);
-    } else {
-        // Normal Floating
-        camera.position.x = Math.sin(elapsedTime * 0.2) * 3;
-        camera.position.z = THREE.MathUtils.lerp(camera.position.z, 8, 0.05);
-        camera.fov = THREE.MathUtils.lerp(camera.fov, 75, 0.05);
-        camera.lookAt(0, 0, 0);
-    }
-    camera.updateProjectionMatrix();
+    // Update Controls
+    controls.update();
 
-    renderer.render(scene, camera);
+    // Render using Composer (for Bloom) instead of standard renderer
+    composer.render();
+
     window.requestAnimationFrame(tick);
-}
+};
 
 tick();
+
+// --- RESIZE HANDLER ---
+window.addEventListener('resize', () => {
+    // Update sizes
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    
+    composer.setSize(width, height);
+});
