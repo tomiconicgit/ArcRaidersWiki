@@ -2,127 +2,41 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Nebula Engine Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arc Raiders Interactive Wiki AI</title>
     <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background-color: #000;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            touch-action: none; /* Disables browser zoom/scroll handling */
-        }
-        canvas {
-            display: block;
-        }
-        #loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 1.2rem;
-            pointer-events: none;
-            transition: opacity 0.5s;
-            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
-            animation: pulse 1.5s infinite alternate;
-        }
-        @keyframes pulse {
-            from { opacity: 0.8; }
-            to { opacity: 1; }
-        }
-        .ui-container {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            color: rgba(255, 255, 255, 0.7);
-            pointer-events: none;
-            z-index: 10;
-        }
-        h1 {
-            font-size: 1rem;
-            margin: 0;
-            letter-spacing: 1px;
-            font-weight: 300;
-        }
-        p {
-            font-size: 0.7rem;
-            margin-top: 5px;
-            color: #888;
-        }
-        .lil-gui { 
-            --width: 300px;
-            max-width: 90%;
-            --widget-height: 40px;
-        }
-        #planetInfo {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(5px);
-            padding: 15px;
-            border-radius: 8px;
-            color: white;
-            max-width: 250px;
-            font-size: 0.9em;
-            display: none; /* Hidden by default */
-            z-index: 11;
-            border-left: 3px solid #0ff;
-            box-shadow: 0 0 15px rgba(0, 255, 255, 0.2);
-            pointer-events: auto; /* Allow interaction with the close button */
-        }
-        #planetInfo h2 {
-            margin-top: 0;
-            margin-bottom: 10px;
-            font-size: 1.2em;
-            color: #0ff;
-            text-shadow: 0 0 5px rgba(0, 255, 255, 0.7);
-        }
-        #planetInfo p {
-            margin-bottom: 5px;
-            color: #ccc;
-        }
-        #closePlanetInfo {
-            position: absolute;
-            top: 5px;
-            right: 10px;
-            background: none;
-            border: none;
-            color: #fff;
-            font-size: 1.5em;
-            cursor: pointer;
-            line-height: 1;
-        }
-        #closePlanetInfo:hover {
-            color: #0ff;
-        }
+        body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
+        #container { position: relative; width: 100vw; height: 100vh; }
+        #info-panel { position: absolute; bottom: 20px; left: 20px; width: 300px; padding: 10px; background: rgba(0, 0, 0, 0.7); color: white; border-radius: 5px; }
+        #query-input { position: absolute; bottom: 100px; left: 20px; width: 300px; padding: 5px; }
+        #query-select { position: absolute; bottom: 140px; left: 20px; width: 310px; padding: 5px; }
+        #submit-btn { position: absolute; bottom: 100px; left: 330px; padding: 5px 10px; }
     </style>
+</head>
+<body>
+    <div id="container"></div>
+    <select id="query-select">
+        <option value="">Select a query...</option>
+        <option value="where is lemon">Where are Lemons?</option>
+        <option value="where is apricot">Where are Apricots?</option>
+        <option value="where is mushroom">Where are Mushrooms?</option>
+        <option value="what is lemon used for">What is Lemon used for?</option>
+        <option value="where is olive grove">Where is Olive Grove?</option>
+        <option value="what resources for fruit mix">What resources for Fruit Mix?</option>
+        <option value="where are arc enemies">Where are ARC enemies?</option>
+    </select>
+    <input type="text" id="query-input" placeholder="Type query (e.g., 'where is lemon')">
+    <button id="submit-btn">Ask AI</button>
+    <div id="info-panel">Welcome to Arc Raiders Wiki AI. Explore the 3D map, ask questions, or click markers.</div>
+    <script src="https://threejs.org/build/three.js"></script>
     <script type="importmap">
         {
             "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+                "three": "https://threejs.org/build/three.module.js",
+                "three/addons/": "https://threejs.org/examples/jsm/"
             }
         }
     </script>
-</head>
-<body>
-    <div id="loading">INITIALIZING NEBULA ENGINE...</div>
-    <div class="ui-container">
-        <h1>NEBULA ENGINE v2.0</h1>
-        <p>Double Tap: Reset Camera • Tap Planet: Focus & Info</p>
-    </div>
-    
-    <div id="planetInfo">
-        <button id="closePlanetInfo">×</button>
-        <h2 id="planetName"></h2>
-        <p>Type: <span id="planetType"></span></p>
-        <p>Mass: <span id="planetMass"></span></p>
-        <p>Radius: <span id="planetRadius"></span></p>
-        <p>Distance: <span id="planetDistance"></span></p>
-    </div>
-    
-    <script type="module" src="./script.js"></script>
+    <script type="module" src="main.js"></script>
 </body>
 </html>
