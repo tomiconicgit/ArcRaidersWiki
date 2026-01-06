@@ -24,6 +24,12 @@
             font-size: 1.2rem;
             pointer-events: none;
             transition: opacity 0.5s;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+            animation: pulse 1.5s infinite alternate;
+        }
+        @keyframes pulse {
+            from { opacity: 0.8; }
+            to { opacity: 1; }
         }
         .ui-container {
             position: absolute;
@@ -44,11 +50,52 @@
             margin-top: 5px;
             color: #888;
         }
-        /* Mobile optimization for the GUI */
         .lil-gui { 
             --width: 300px;
             max-width: 90%;
-            --widget-height: 40px; /* Taller for touch targets */
+            --widget-height: 40px;
+        }
+        #planetInfo {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(5px);
+            padding: 15px;
+            border-radius: 8px;
+            color: white;
+            max-width: 250px;
+            font-size: 0.9em;
+            display: none; /* Hidden by default */
+            z-index: 11;
+            border-left: 3px solid #0ff;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.2);
+            pointer-events: auto; /* Allow interaction with the close button */
+        }
+        #planetInfo h2 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+            color: #0ff;
+            text-shadow: 0 0 5px rgba(0, 255, 255, 0.7);
+        }
+        #planetInfo p {
+            margin-bottom: 5px;
+            color: #ccc;
+        }
+        #closePlanetInfo {
+            position: absolute;
+            top: 5px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 1.5em;
+            cursor: pointer;
+            line-height: 1;
+        }
+        #closePlanetInfo:hover {
+            color: #0ff;
         }
     </style>
     <script type="importmap">
@@ -61,10 +108,19 @@
     </script>
 </head>
 <body>
-    <div id="loading">INITIALIZING GPU...</div>
+    <div id="loading">INITIALIZING NEBULA ENGINE...</div>
     <div class="ui-container">
-        <h1>NEBULA ENGINE</h1>
-        <p>Double Tap: Explode • Pinch: Zoom • Drag: Orbit</p>
+        <h1>NEBULA ENGINE v2.0</h1>
+        <p>Double Tap: Reset Camera • Tap Planet: Focus & Info</p>
+    </div>
+    
+    <div id="planetInfo">
+        <button id="closePlanetInfo">×</button>
+        <h2 id="planetName"></h2>
+        <p>Type: <span id="planetType"></span></p>
+        <p>Mass: <span id="planetMass"></span></p>
+        <p>Radius: <span id="planetRadius"></span></p>
+        <p>Distance: <span id="planetDistance"></span></p>
     </div>
     
     <script type="module" src="./script.js"></script>
