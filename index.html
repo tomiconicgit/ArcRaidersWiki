@@ -2,41 +2,53 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Quantum Vortex</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Nebula Engine Pro</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
             background-color: #000;
-            font-family: 'Courier New', Courier, monospace;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            touch-action: none; /* Disables browser zoom/scroll handling */
         }
         canvas {
             display: block;
         }
-        #ui {
+        #loading {
             position: absolute;
-            top: 20px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 1.2rem;
+            pointer-events: none;
+            transition: opacity 0.5s;
+        }
+        .ui-container {
+            position: absolute;
+            bottom: 20px;
             left: 20px;
-            color: rgba(255, 255, 255, 0.8);
+            color: rgba(255, 255, 255, 0.7);
             pointer-events: none;
             z-index: 10;
         }
         h1 {
-            font-size: 1.2rem;
+            font-size: 1rem;
             margin: 0;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+            letter-spacing: 1px;
+            font-weight: 300;
         }
         p {
-            font-size: 0.8rem;
-            color: #aaa;
-        }
-        .controls {
-            margin-top: 10px;
             font-size: 0.7rem;
-            color: #666;
+            margin-top: 5px;
+            color: #888;
+        }
+        /* Mobile optimization for the GUI */
+        .lil-gui { 
+            --width: 300px;
+            max-width: 90%;
+            --widget-height: 40px; /* Taller for touch targets */
         }
     </style>
     <script type="importmap">
@@ -49,15 +61,12 @@
     </script>
 </head>
 <body>
-    <div id="ui">
-        <h1>Quantum Vortex</h1>
-        <p>System Status: Stable</p>
-        <div class="controls">
-            MOUSE X: Rotation Speed<br>
-            MOUSE Y: Color Shift<br>
-            CLICK: Toggle Warp Drive
-        </div>
+    <div id="loading">INITIALIZING GPU...</div>
+    <div class="ui-container">
+        <h1>NEBULA ENGINE</h1>
+        <p>Double Tap: Explode • Pinch: Zoom • Drag: Orbit</p>
     </div>
+    
     <script type="module" src="./script.js"></script>
 </body>
 </html>
