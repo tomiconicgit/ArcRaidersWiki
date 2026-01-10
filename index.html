@@ -2,25 +2,383 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Podcast News Overlay</title>
-    <link rel="stylesheet" href="css/main.css">
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "lil-gui": "https://unpkg.com/lil-gui@0.19.1/dist/lil-gui.esm.min.js"
-            }
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0d1117">
+    <title>RedBull Tracker</title>
+    <style>
+        :root {
+            --rb-blue: #2d3047;
+            --rb-silver: #e0e0e0;
+            --rb-red: #ff3366;
+            --rb-yellow: #f4c430;
+            --ios-safe-top: env(safe-area-inset-top);
+            --ios-safe-bottom: env(safe-area-inset-bottom);
         }
-    </script>
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--rb-blue);
+            color: white;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* --- Parallax Background --- */
+        .parallax-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+            background: linear-gradient(135deg, #1a1c29 0%, #2d3047 100%);
+        }
+
+        .bubble {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            animation: floatUp linear infinite;
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(100vh) scale(1); opacity: 0; }
+            50% { opacity: 0.5; }
+            100% { transform: translateY(-10vh) scale(1.5); opacity: 0; }
+        }
+
+        /* --- Main UI --- */
+        header {
+            padding-top: calc(var(--ios-safe-top) + 20px);
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--rb-silver);
+            text-shadow: 0 0 10px rgba(255,255,255,0.3);
+        }
+
+        .counter-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        #count-display {
+            font-size: 6rem;
+            font-weight: 800;
+            color: var(--rb-yellow);
+            text-shadow: 4px 4px 0px var(--rb-red);
+            transition: transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .unit {
+            font-size: 1.2rem;
+            color: var(--rb-silver);
+            margin-top: -10px;
+            opacity: 0.8;
+        }
+
+        /* --- Buttons --- */
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            width: 90%;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            border: none;
+            padding: 20px;
+            border-radius: 20px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .btn-drink {
+            background: linear-gradient(135deg, var(--rb-silver), #ffffff);
+            color: var(--rb-blue);
+            grid-column: span 2;
+        }
+
+        .btn-scan {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* Hidden file input for camera */
+        #camera-input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            z-index: 2;
+        }
+
+        .btn-reset {
+            background: rgba(255, 51, 102, 0.2);
+            color: var(--rb-red);
+            border: 1px solid rgba(255, 51, 102, 0.3);
+        }
+
+        /* --- History / Scanner Log --- */
+        .log-container {
+            width: 90%;
+            height: 150px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 20px;
+            margin-bottom: calc(var(--ios-safe-bottom) + 20px);
+            overflow-y: auto;
+            padding: 15px;
+            font-size: 0.9rem;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .log-entry {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .log-entry:last-child { border-bottom: none; }
+        .log-highlight { color: var(--rb-yellow); }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        /* Scanning Animation Overlay */
+        #scan-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.85);
+            z-index: 100;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        
+        .scan-line {
+            width: 80%;
+            height: 2px;
+            background: var(--rb-red);
+            box-shadow: 0 0 10px var(--rb-red);
+            animation: scanMove 1.5s ease-in-out infinite;
+        }
+
+        @keyframes scanMove {
+            0% { transform: translateY(-100px); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateY(100px); opacity: 0; }
+        }
+
+    </style>
 </head>
 <body>
-    <div id="canvas-container"></div>
-    
-    <div id="ui-layer">
-        <button id="record-btn">● REC</button>
+
+    <div class="parallax-bg" id="bg"></div>
+
+    <header>
+        <h1>Wings Tracker</h1>
+    </header>
+
+    <div class="counter-container">
+        <div id="count-display">0</div>
+        <div class="unit">Cans Consumed</div>
     </div>
 
-    <script type="module" src="js/app.js"></script>
+    <div id="scan-overlay">
+        <div class="scan-line"></div>
+        <p style="margin-top: 20px; color: white;">Analyzing Barcode...</p>
+    </div>
+
+    <div class="controls">
+        <button class="btn btn-drink" onclick="incrementCount()">
+            <span style="font-size: 1.5rem;">+</span> DRINK ONE
+        </button>
+
+        <button class="btn btn-scan">
+            <span>📷 SCAN BARCODE</span>
+            <input type="file" accept="image/*" capture="environment" id="camera-input">
+        </button>
+
+        <button class="btn btn-reset" onclick="resetCount()">RESET</button>
+    </div>
+
+    <div class="log-container" id="log-list">
+        <div class="log-entry" style="color: #666; justify-content: center;">No recent cans...</div>
+    </div>
+
+    <script>
+        // --- Variables ---
+        let count = 0;
+        const display = document.getElementById('count-display');
+        const logList = document.getElementById('log-list');
+        const overlay = document.getElementById('scan-overlay');
+        
+        // Fun "Database" for the scanner
+        const flavors = ['Original', 'Sugar Free', 'Watermelon', 'Tropical', 'Blueberry', 'Coconut Berry', 'Peach Edition'];
+        const shops = ['7-Eleven', 'Gas Station', 'Tesco', 'Corner Shop', 'Vending Machine', 'Costco'];
+        
+        // --- Init ---
+        // Load data from local storage on startup
+        window.onload = () => {
+            const savedCount = localStorage.getItem('rb_count');
+            if(savedCount) {
+                count = parseInt(savedCount);
+                display.innerText = count;
+            }
+            createBubbles();
+        };
+
+        // --- Core Functions ---
+        
+        function incrementCount() {
+            count++;
+            updateUI();
+            animateCounter();
+            addLog("Manual Entry", "$2.50 (Est)");
+        }
+
+        function resetCount() {
+            if(confirm("Clear all wings?")) {
+                count = 0;
+                logList.innerHTML = '<div class="log-entry" style="color: #666; justify-content: center;">History Cleared</div>';
+                updateUI();
+            }
+        }
+
+        function updateUI() {
+            display.innerText = count;
+            localStorage.setItem('rb_count', count);
+        }
+
+        function animateCounter() {
+            display.style.transform = "scale(1.4)";
+            setTimeout(() => display.style.transform = "scale(1)", 100);
+            
+            // Trigger haptic feedback if available on device
+            if (window.navigator.vibrate) {
+                window.navigator.vibrate(50);
+            }
+        }
+
+        function addLog(flavor, details) {
+            // Remove "empty" message if it exists
+            if(logList.innerText.includes("No recent")) logList.innerHTML = "";
+
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            entry.innerHTML = `
+                <div><span class="log-highlight">${flavor}</span> <small style="color:#888">@ ${time}</small></div>
+                <div style="font-size: 0.8rem; opacity: 0.7;">${details}</div>
+            `;
+            
+            logList.prepend(entry);
+        }
+
+        // --- Scanner Logic ---
+        document.getElementById('camera-input').addEventListener('change', function(e) {
+            if (e.target.files && e.target.files[0]) {
+                // Show scanning animation
+                overlay.style.display = 'flex';
+                
+                // Simulate processing delay (2 seconds)
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                    
+                    // Generate Random "Scan Result"
+                    const rFlavor = flavors[Math.floor(Math.random() * flavors.length)];
+                    const rShop = shops[Math.floor(Math.random() * shops.length)];
+                    const rPrice = (Math.random() * (4.50 - 2.00) + 2.00).toFixed(2);
+                    
+                    // Update App
+                    count++;
+                    updateUI();
+                    animateCounter();
+                    addLog(rFlavor, `$${rPrice} found at ${rShop}`);
+                    
+                    alert(`✅ SCANNED!\n\nDetected: Red Bull ${rFlavor}\nPrice: $${rPrice}\nLocation: ${rShop}`);
+                    
+                    // Clear input so we can scan again
+                    e.target.value = ''; 
+                }, 2000);
+            }
+        });
+
+        // --- Visuals: Parallax Bubbles ---
+        function createBubbles() {
+            const bg = document.getElementById('bg');
+            for(let i=0; i<15; i++) {
+                const b = document.createElement('div');
+                b.className = 'bubble';
+                const size = Math.random() * 20 + 5;
+                b.style.width = `${size}px`;
+                b.style.height = `${size}px`;
+                b.style.left = `${Math.random() * 100}%`;
+                b.style.animationDuration = `${Math.random() * 5 + 5}s`;
+                b.style.animationDelay = `${Math.random() * 5}s`;
+                bg.appendChild(b);
+            }
+            
+            // Simple Gyroscope Parallax for Mobile
+            window.addEventListener('deviceorientation', (event) => {
+                const x = event.gamma; // tilt left-right
+                const y = event.beta;  // tilt front-back
+                // Limit the movement
+                bg.style.transform = `translate(${x/2}px, ${y/2}px)`;
+            });
+        }
+    </script>
 </body>
 </html>
