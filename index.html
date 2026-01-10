@@ -4,162 +4,213 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>CHRONOS_LAPSE // 120FPS</title>
+    <title>AXON // OPTICS</title>
     <style>
+        :root {
+            --axon-cyan: #00f2ff;
+            --axon-bg: #050505;
+        }
+
         body, html {
             margin: 0; padding: 0; width: 100%; height: 100%;
-            overflow: hidden; background: #000;
-            font-family: -apple-system, system-ui, sans-serif;
+            background: var(--axon-bg); color: var(--axon-cyan);
+            font-family: "SF Mono", "Fira Code", monospace;
+            overflow: hidden; user-select: none; -webkit-user-select: none;
         }
 
-        canvas {
-            width: 100vw; height: 100vh;
-            object-fit: cover;
-            filter: contrast(1.1) saturate(1.2);
+        /* Video Feed */
+        #camera-container {
+            position: absolute; inset: 0; z-index: 1;
+            display: flex; align-items: center; justify-content: center;
+        }
+        video {
+            width: 100%; height: 100%; object-fit: cover;
+            filter: brightness(1.1) contrast(1.1);
         }
 
-        #ui {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; z-index: 10;
-            display: flex; flex-direction: column; justify-content: space-between;
-            padding: calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 20px);
-            box-sizing: border-box;
+        /* UI Overlays */
+        #canvas-overlay {
+            position: absolute; inset: 0; z-index: 2;
+            pointer-events: none;
         }
 
-        .hud-label {
-            color: #fff; font-size: 10px; letter-spacing: 2px;
-            text-transform: uppercase; opacity: 0.7;
+        #interaction-layer {
+            position: absolute; inset: 0; z-index: 5;
         }
 
-        .controls {
-            pointer-events: auto; display: flex; justify-content: center; gap: 20px;
+        /* Targeting Reticle */
+        #reticle {
+            position: absolute; width: 80px; height: 80px;
+            border: 1px solid var(--axon-cyan);
+            transform: translate(-50%, -50%);
+            display: none; transition: all 0.1s ease-out;
+            box-shadow: 0 0 15px rgba(0, 242, 255, 0.3);
+        }
+        #reticle::before, #reticle::after {
+            content: ''; position: absolute; inset: -5px;
+            border: 2px solid var(--axon-cyan);
+        }
+        #reticle::before { width: 10px; height: 0; top: 50%; left: -10px; }
+        #reticle::after { height: 10px; width: 0; left: 50%; top: -10px; }
+
+        /* Snapshot Display */
+        #snapshot-panel {
+            position: absolute; right: 20px; top: 100px;
+            width: 160px; height: 200px;
+            background: rgba(0,0,0,0.8);
+            border: 1px solid var(--axon-cyan);
+            display: none; flex-direction: column;
+            animation: slideIn 0.3s forwards;
+            backdrop-filter: blur(10px);
+        }
+        #snapshot-view {
+            width: 100%; height: 140px; object-fit: cover;
+            border-bottom: 1px solid var(--axon-cyan);
+            filter: grayscale(1) contrast(1.5);
         }
 
-        .btn {
-            background: rgba(255,255,255,0.1); border: 1px solid #fff;
-            color: #fff; padding: 12px 24px; border-radius: 30px;
-            backdrop-filter: blur(10px); font-size: 12px; font-weight: bold;
+        /* Labels */
+        .hud-item { position: absolute; font-size: 10px; letter-spacing: 1px; z-index: 10; }
+        .top-left { top: 50px; left: 20px; }
+        .bottom-right { bottom: 40px; right: 20px; text-align: right; }
+
+        /* Controls */
+        #snap-prompt {
+            position: absolute; bottom: 120px; left: 50%;
+            transform: translateX(-50%);
+            padding: 15px 30px;
+            border: 1px solid var(--axon-cyan);
+            background: rgba(0, 242, 255, 0.1);
+            color: var(--axon-cyan);
+            font-weight: bold; font-size: 14px;
+            display: none; z-index: 10;
         }
 
-        .btn:active { background: #fff; color: #000; }
-
-        #start-screen {
-            position: fixed; inset: 0; z-index: 100;
-            background: #000; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; color: #fff;
-        }
-
-        .scan-line {
-            position: absolute; top: 0; width: 2px; height: 100%;
-            background: rgba(255,0,0,0.5); z-index: 5;
-            box-shadow: 0 0 10px red;
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        
+        #init-screen {
+            position: fixed; inset: 0; z-index: 100; background: var(--axon-bg);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
     </style>
 </head>
 <body>
 
-    <div id="start-screen">
-        <h1 style="letter-spacing: 10px;">CHRONOS</h1>
-        <p style="opacity: 0.5;">LOCKING 120FPS ENGINE...</p>
-        <button class="btn" onclick="init()">START SCANNER</button>
+    <div id="init-screen">
+        <div style="font-size: 24px; margin-bottom: 20px;">AXON_v1.07</div>
+        <button onclick="startApp()" style="background:none; border: 1px solid var(--axon-cyan); color: var(--axon-cyan); padding: 15px 40px; cursor: pointer;">CONNECT OPTICS</button>
     </div>
 
-    <div id="ui">
-        <div style="display:flex; justify-content: space-between;">
-            <div class="hud-label">MODE: SLIT-SCAN<br>FPS: <span id="fps-val">120</span></div>
-            <div class="hud-label" style="text-align:right;">BUFF: ACTIVE<br>SENS: HIGH</div>
-        </div>
-
-        <div class="controls">
-            <button class="btn" onclick="resetCanvas()">CLEAR BUFFER</button>
-            <button class="btn" onclick="toggleDirection()">FLIP FLOW</button>
-        </div>
+    <div id="camera-container">
+        <video id="v" playsinline></video>
     </div>
 
-    <div id="scan-bar" class="scan-line"></div>
-    <canvas id="mainCanvas"></canvas>
-    <video id="v" playsinline style="display:none"></video>
+    <canvas id="canvas-overlay"></canvas>
+    <div id="interaction-layer"></div>
+
+    <div id="reticle"></div>
+
+    <div id="snap-prompt" onclick="takeSnapshot()">INITIATE ENHANCED CAPTURE</div>
+
+    <div id="snapshot-panel">
+        <div style="font-size: 9px; padding: 5px;">RESOLVED_IMAGE_ALPHA</div>
+        <img id="snapshot-view">
+        <div style="font-size: 9px; padding: 5px; color: #fff;">ZOOM: 4.0x<br>STATUS: STORED</div>
+    </div>
+
+    <div class="hud-item top-left">
+        RANGE: <span id="range-val">--</span>m<br>
+        AZIMUTH: <span id="azi-val">000</span>°
+    </div>
+
+    <div class="hud-item bottom-right">
+        REC_TYPE: RAW_120<br>
+        BUFFER: 0.4s
+    </div>
 
     <script>
-        let canvas = document.getElementById('mainCanvas');
-        let ctx = canvas.getContext('2d', {alpha: false});
-        let video = document.getElementById('v');
-        let scanBar = document.getElementById('scan-bar');
-        
-        let x = 0;
-        let direction = 1; // 1 = Left to Right, -1 = Right to Left
-        let isRunning = false;
+        const v = document.getElementById('v');
+        const reticle = document.getElementById('reticle');
+        const prompt = document.getElementById('snap-prompt');
+        const panel = document.getElementById('snapshot-panel');
+        const snapView = document.getElementById('snapshot-view');
+        let audioCtx;
 
-        async function init() {
-            document.getElementById('start-screen').style.display = 'none';
+        // Sound Synthesis
+        function playTone(freq, type, duration) {
+            if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        async function startApp() {
+            document.getElementById('init-screen').style.display = 'none';
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { 
-                    facingMode: 'environment',
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                    frameRate: { ideal: 120 } 
-                }
+                video: { facingMode: 'environment', frameRate: { ideal: 120 } }
             });
-            video.srcObject = stream;
-            video.play();
+            v.srcObject = stream;
+            v.play();
+            playTone(800, 'square', 0.1);
             
-            video.onloadedmetadata = () => {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
-                isRunning = true;
-                requestAnimationFrame(loop);
-            };
+            animateHUD();
         }
 
-        function loop() {
-            if (!isRunning) return;
+        document.getElementById('interaction-layer').addEventListener('click', (e) => {
+            const x = e.clientX;
+            const y = e.clientY;
 
-            // Calculate current "Slit"
-            // We take a thin slice from the center of the camera feed
-            const sliceWidth = 2;
-            const camSliceX = video.videoWidth / 2;
+            // Move Reticle
+            reticle.style.display = 'block';
+            reticle.style.left = x + 'px';
+            reticle.style.top = y + 'px';
             
-            // Draw that slice onto our canvas at position X
-            ctx.drawImage(
-                video, 
-                camSliceX, 0, sliceWidth, video.videoHeight, // Source
-                x, 0, sliceWidth, canvas.height // Destination
-            );
-
-            // Update X position for the next frame
-            x += (sliceWidth * direction);
-
-            // Wrap around logic
-            if (x > canvas.width) x = 0;
-            if (x < 0) x = canvas.width;
-
-            // Move the visual scan bar
-            scanBar.style.left = x + 'px';
-
-            // Haptic feedback every time we cross the center
-            if (Math.abs(x - canvas.width/2) < 2) {
-                if (window.navigator.vibrate) window.navigator.vibrate(10);
-            }
-
-            requestAnimationFrame(loop);
-        }
-
-        function resetCanvas() {
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            x = (direction === 1) ? 0 : canvas.width;
-        }
-
-        function toggleDirection() {
-            direction *= -1;
-            if (window.navigator.vibrate) window.navigator.vibrate(50);
-        }
-
-        // Handle orientation changes
-        window.addEventListener('resize', () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+            // UI Feedback
+            playTone(1200, 'sine', 0.05);
+            prompt.style.display = 'block';
+            
+            // Fake Data
+            document.getElementById('range-val').innerText = (Math.random() * 20 + 2).toFixed(1);
+            
+            if(window.navigator.vibrate) window.navigator.vibrate(10);
         });
+
+        function takeSnapshot() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 300;
+            canvas.height = 300;
+            const ctx = canvas.getContext('2d');
+
+            // Logic to crop the video where the reticle is
+            const rect = reticle.getBoundingClientRect();
+            const videoRect = v.getBoundingClientRect();
+            
+            const scaleX = v.videoWidth / videoRect.width;
+            const scaleY = v.videoHeight / videoRect.height;
+            
+            const sourceX = (rect.left - videoRect.left) * scaleX;
+            const sourceY = (rect.top - videoRect.top) * scaleY;
+            const sourceSize = 100 * scaleX; // Zoomed area
+
+            ctx.drawImage(v, sourceX, sourceY, sourceSize, sourceSize, 0, 0, 300, 300);
+            
+            snapView.src = canvas.toDataURL();
+            panel.style.display = 'flex';
+            playTone(400, 'sawtooth', 0.2);
+            if(window.navigator.vibrate) window.navigator.vibrate([30, 50, 30]);
+        }
+
+        function animateHUD() {
+            document.getElementById('azi-val').innerText = Math.floor(Math.random() * 360);
+            setTimeout(animateHUD, 500);
+        }
     </script>
 </body>
 </html>
