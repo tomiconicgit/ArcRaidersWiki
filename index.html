@@ -1,216 +1,1151 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>AXON // OPTICS</title>
-    <style>
-        :root {
-            --axon-cyan: #00f2ff;
-            --axon-bg: #050505;
-        }
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Field Lens</title>
+  <style>
+    :root{
+      --bg:#07090d;
+      --panel:rgba(14,18,26,.72);
+      --panel2:rgba(14,18,26,.92);
+      --text:#e8eefc;
+      --muted:rgba(232,238,252,.65);
+      --line:rgba(232,238,252,.18);
+      --accent:#7cf0ff;
+      --accent2:#b6ff7a;
+      --danger:#ff5c7c;
+      --shadow: 0 18px 40px rgba(0,0,0,.45);
+      --radius: 18px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%; margin:0; background:var(--bg); color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;}
+    body{overflow:hidden}
 
-        body, html {
-            margin: 0; padding: 0; width: 100%; height: 100%;
-            background: var(--axon-bg); color: var(--axon-cyan);
-            font-family: "SF Mono", "Fira Code", monospace;
-            overflow: hidden; user-select: none; -webkit-user-select: none;
-        }
+    .app {
+      position:fixed; inset:0;
+      padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom)) 14px;
+      display:flex; flex-direction:column; gap:12px;
+    }
 
-        /* Video Feed */
-        #camera-container {
-            position: absolute; inset: 0; z-index: 1;
-            display: flex; align-items: center; justify-content: center;
-        }
-        video {
-            width: 100%; height: 100%; object-fit: cover;
-            filter: brightness(1.1) contrast(1.1);
-        }
+    header {
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding: 10px 12px;
+      border:1px solid var(--line);
+      background: linear-gradient(180deg, rgba(18,22,32,.85), rgba(18,22,32,.55));
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+    .brand{
+      display:flex; flex-direction:column; gap:2px;
+      min-width: 0;
+    }
+    .brand .title{font-weight:700; letter-spacing:.2px; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+    .brand .sub{font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+    .statusDot{
+      width:10px;height:10px;border-radius:99px;
+      background: rgba(255,255,255,.15);
+      box-shadow: 0 0 0 4px rgba(255,255,255,.06);
+      flex: 0 0 auto;
+    }
+    .statusDot.on{
+      background: var(--accent2);
+      box-shadow: 0 0 0 4px rgba(182,255,122,.12), 0 0 18px rgba(182,255,122,.35);
+    }
 
-        /* UI Overlays */
-        #canvas-overlay {
-            position: absolute; inset: 0; z-index: 2;
-            pointer-events: none;
-        }
+    .stage {
+      position:relative; flex:1;
+      border-radius: calc(var(--radius) + 6px);
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,.14);
+      background: radial-gradient(1200px 900px at 50% 30%, rgba(124,240,255,.10), transparent 55%),
+                  radial-gradient(900px 700px at 30% 70%, rgba(182,255,122,.10), transparent 50%),
+                  #0a0d14;
+      box-shadow: var(--shadow);
+      touch-action: none;
+    }
 
-        #interaction-layer {
-            position: absolute; inset: 0; z-index: 5;
-        }
+    video{
+      position:absolute; inset:0;
+      width:100%; height:100%;
+      object-fit:cover;
+      transform: scaleX(-1); /* will flip later if we detect rear cam; kept for front-fallback */
+      filter: contrast(1.02) saturate(1.05);
+      background:#000;
+    }
 
-        /* Targeting Reticle */
-        #reticle {
-            position: absolute; width: 80px; height: 80px;
-            border: 1px solid var(--axon-cyan);
-            transform: translate(-50%, -50%);
-            display: none; transition: all 0.1s ease-out;
-            box-shadow: 0 0 15px rgba(0, 242, 255, 0.3);
-        }
-        #reticle::before, #reticle::after {
-            content: ''; position: absolute; inset: -5px;
-            border: 2px solid var(--axon-cyan);
-        }
-        #reticle::before { width: 10px; height: 0; top: 50%; left: -10px; }
-        #reticle::after { height: 10px; width: 0; left: 50%; top: -10px; }
+    canvas#overlay{
+      position:absolute; inset:0;
+      width:100%; height:100%;
+      pointer-events:none;
+    }
 
-        /* Snapshot Display */
-        #snapshot-panel {
-            position: absolute; right: 20px; top: 100px;
-            width: 160px; height: 200px;
-            background: rgba(0,0,0,0.8);
-            border: 1px solid var(--axon-cyan);
-            display: none; flex-direction: column;
-            animation: slideIn 0.3s forwards;
-            backdrop-filter: blur(10px);
-        }
-        #snapshot-view {
-            width: 100%; height: 140px; object-fit: cover;
-            border-bottom: 1px solid var(--axon-cyan);
-            filter: grayscale(1) contrast(1.5);
-        }
+    .hudTop {
+      position:absolute; left:12px; right:12px; top:12px;
+      display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+      pointer-events:none;
+    }
 
-        /* Labels */
-        .hud-item { position: absolute; font-size: 10px; letter-spacing: 1px; z-index: 10; }
-        .top-left { top: 50px; left: 20px; }
-        .bottom-right { bottom: 40px; right: 20px; text-align: right; }
+    .pill {
+      pointer-events:none;
+      display:inline-flex; align-items:center; gap:8px;
+      padding:10px 12px;
+      border:1px solid rgba(255,255,255,.16);
+      background: rgba(10,12,18,.45);
+      backdrop-filter: blur(10px);
+      border-radius: 999px;
+      font-size:12px;
+      color: rgba(232,238,252,.85);
+      box-shadow: 0 10px 20px rgba(0,0,0,.25);
+      max-width: 66%;
+      white-space: nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .kbd{
+      font-size:11px; color:rgba(232,238,252,.75);
+      padding:2px 8px; border-radius:999px;
+      border:1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.06);
+    }
 
-        /* Controls */
-        #snap-prompt {
-            position: absolute; bottom: 120px; left: 50%;
-            transform: translateX(-50%);
-            padding: 15px 30px;
-            border: 1px solid var(--axon-cyan);
-            background: rgba(0, 242, 255, 0.1);
-            color: var(--axon-cyan);
-            font-weight: bold; font-size: 14px;
-            display: none; z-index: 10;
-        }
+    .controls {
+      display:grid;
+      grid-template-columns: 1.1fr 1fr 1fr 1fr;
+      gap:10px;
+      padding: 12px;
+      border-radius: var(--radius);
+      border:1px solid var(--line);
+      background: linear-gradient(180deg, rgba(18,22,32,.78), rgba(18,22,32,.50));
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
 
-        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
-        
-        #init-screen {
-            position: fixed; inset: 0; z-index: 100; background: var(--axon-bg);
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-        }
-    </style>
+    button, .seg, input[type="range"]{
+      -webkit-tap-highlight-color: transparent;
+    }
+    button{
+      appearance:none; border:1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 12px 12px;
+      font-weight: 650;
+      font-size: 13px;
+      display:flex; align-items:center; justify-content:center; gap:10px;
+      box-shadow: 0 10px 16px rgba(0,0,0,.16);
+      user-select:none;
+    }
+    button:active{transform: translateY(1px); filter: brightness(1.1);}
+    button.primary{
+      background: linear-gradient(180deg, rgba(124,240,255,.22), rgba(124,240,255,.10));
+      border-color: rgba(124,240,255,.35);
+    }
+    button.good{
+      background: linear-gradient(180deg, rgba(182,255,122,.22), rgba(182,255,122,.10));
+      border-color: rgba(182,255,122,.35);
+    }
+    button.danger{
+      background: linear-gradient(180deg, rgba(255,92,124,.22), rgba(255,92,124,.10));
+      border-color: rgba(255,92,124,.35);
+    }
+    button.off{
+      opacity:.6;
+    }
+
+    .row2{
+      grid-column: 1 / -1;
+      display:flex; gap:10px; align-items:center; justify-content:space-between;
+      padding-top:2px;
+    }
+    .sliderWrap{
+      flex:1;
+      display:flex; align-items:center; gap:10px;
+      padding:10px 12px;
+      border-radius: 14px;
+      border:1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.05);
+    }
+    .sliderWrap label{
+      font-size:12px; color: rgba(232,238,252,.75); min-width: 52px;
+    }
+    input[type="range"]{
+      width:100%;
+      accent-color: var(--accent);
+    }
+    .tiny{
+      font-size:12px; color:rgba(232,238,252,.72);
+      padding: 0 2px;
+      min-width: 44px;
+      text-align:right;
+    }
+
+    .tray {
+      display:flex; gap:10px; overflow:auto; padding: 10px 2px 0 2px;
+      scrollbar-width:none;
+    }
+    .tray::-webkit-scrollbar{display:none}
+    .thumb{
+      width:84px; height:84px; border-radius: 16px;
+      border:1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.04);
+      overflow:hidden;
+      flex: 0 0 auto;
+      position:relative;
+    }
+    .thumb img{width:100%; height:100%; object-fit:cover}
+    .thumb .tag{
+      position:absolute; left:8px; bottom:8px;
+      font-size:10px; padding:3px 8px; border-radius:999px;
+      border:1px solid rgba(255,255,255,.18);
+      background: rgba(0,0,0,.35);
+      backdrop-filter: blur(8px);
+      color: rgba(232,238,252,.88);
+    }
+
+    .modal {
+      position:fixed; inset:0;
+      display:none;
+      background: rgba(0,0,0,.55);
+      backdrop-filter: blur(10px);
+      padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom)) 14px;
+      z-index: 50;
+    }
+    .modal.on{display:flex}
+    .sheet{
+      margin:auto;
+      width:min(520px, 100%);
+      border-radius: calc(var(--radius) + 10px);
+      border:1px solid rgba(255,255,255,.18);
+      background: linear-gradient(180deg, rgba(18,22,32,.95), rgba(18,22,32,.85));
+      box-shadow: 0 26px 70px rgba(0,0,0,.55);
+      overflow:hidden;
+    }
+    .sheetHead{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding: 14px 14px;
+      border-bottom:1px solid rgba(255,255,255,.12);
+    }
+    .sheetHead .h{
+      display:flex; flex-direction:column; gap:2px;
+      min-width:0;
+    }
+    .sheetHead .h b{font-size:14px}
+    .sheetHead .h span{font-size:12px;color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+    .sheetBody{
+      padding: 14px;
+      display:grid;
+      grid-template-columns: 1fr;
+      gap:12px;
+    }
+    .preview{
+      width:100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 18px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.25);
+      overflow:hidden;
+      position:relative;
+    }
+    .preview img{width:100%; height:100%; object-fit:cover}
+    .sheetActions{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+      padding: 14px;
+      border-top:1px solid rgba(255,255,255,.12);
+    }
+
+    .hint {
+      position:absolute; left:12px; right:12px; bottom:12px;
+      padding: 10px 12px;
+      border-radius: 16px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(10,12,18,.35);
+      color: rgba(232,238,252,.78);
+      font-size:12px;
+      backdrop-filter: blur(10px);
+    }
+    .hint b{color: rgba(232,238,252,.92)}
+
+    .warn {
+      color: rgba(255,255,255,.85);
+      padding: 10px 12px;
+      border:1px solid rgba(255,92,124,.28);
+      background: rgba(255,92,124,.10);
+      border-radius: 14px;
+      font-size:12px;
+      line-height:1.35;
+    }
+
+    @media (max-height: 740px){
+      .tray .thumb{width:76px;height:76px}
+      .controls{gap:8px}
+      button{padding:11px 10px}
+    }
+  </style>
 </head>
 <body>
+  <div class="app">
+    <header>
+      <div class="brand">
+        <div class="title">Field Lens</div>
+        <div class="sub" id="subline">Tap <b>Start</b> to arm camera • Tap to lock a target</div>
+      </div>
+      <div class="statusDot" id="dot" title="Camera status"></div>
+    </header>
 
-    <div id="init-screen">
-        <div style="font-size: 24px; margin-bottom: 20px;">AXON_v1.07</div>
-        <button onclick="startApp()" style="background:none; border: 1px solid var(--axon-cyan); color: var(--axon-cyan); padding: 15px 40px; cursor: pointer;">CONNECT OPTICS</button>
+    <div class="stage" id="stage">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay"></canvas>
+
+      <div class="hudTop">
+        <div class="pill" id="pillLeft">Mode: <span class="kbd" id="modeLabel">Idle</span></div>
+        <div class="pill" id="pillRight">Target: <span class="kbd" id="targetLabel">None</span></div>
+      </div>
+
+      <div class="hint" id="hint">
+        <b>Tap</b> to pick a target • <b>Lock</b> to track • <b>Snapshot</b> to capture a zoomed cutout
+      </div>
     </div>
 
-    <div id="camera-container">
-        <video id="v" playsinline></video>
+    <div class="controls">
+      <button class="good" id="btnStart">Start</button>
+      <button class="primary off" id="btnGrid">Grid</button>
+      <button class="primary off" id="btnLock">Lock</button>
+      <button class="primary off" id="btnSnap">Snapshot</button>
+
+      <div class="row2">
+        <div class="sliderWrap">
+          <label for="zoom">Zoom</label>
+          <input id="zoom" type="range" min="1" max="6" step="0.1" value="1" />
+          <div class="tiny" id="zoomVal">1.0×</div>
+        </div>
+        <button class="danger off" id="btnStop">Stop</button>
+      </div>
+
+      <div class="tray" id="tray" aria-label="Snapshots tray"></div>
     </div>
 
-    <canvas id="canvas-overlay"></canvas>
-    <div id="interaction-layer"></div>
-
-    <div id="reticle"></div>
-
-    <div id="snap-prompt" onclick="takeSnapshot()">INITIATE ENHANCED CAPTURE</div>
-
-    <div id="snapshot-panel">
-        <div style="font-size: 9px; padding: 5px;">RESOLVED_IMAGE_ALPHA</div>
-        <img id="snapshot-view">
-        <div style="font-size: 9px; padding: 5px; color: #fff;">ZOOM: 4.0x<br>STATUS: STORED</div>
+    <div class="modal" id="modal">
+      <div class="sheet">
+        <div class="sheetHead">
+          <div class="h">
+            <b>Snapshot</b>
+            <span id="shotMeta">—</span>
+          </div>
+          <button id="btnClose" class="primary">Close</button>
+        </div>
+        <div class="sheetBody">
+          <div class="preview"><img id="shotImg" alt="Snapshot preview" /></div>
+          <div class="warn" id="warnBox" style="display:none;"></div>
+        </div>
+        <div class="sheetActions">
+          <button id="btnSave" class="good">Save</button>
+          <button id="btnCopy" class="primary">Copy</button>
+        </div>
+      </div>
     </div>
+  </div>
 
-    <div class="hud-item top-left">
-        RANGE: <span id="range-val">--</span>m<br>
-        AZIMUTH: <span id="azi-val">000</span>°
-    </div>
+  <script>
+    (() => {
+      // ---------- Tiny audio UI (no external files) ----------
+      let audioCtx;
+      function clickSound(type = "click"){
+        try{
+          if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const t0 = audioCtx.currentTime;
+          const o = audioCtx.createOscillator();
+          const g = audioCtx.createGain();
+          o.type = "triangle";
+          const f = type === "snap" ? 820 : type === "lock" ? 520 : 360;
+          o.frequency.setValueAtTime(f, t0);
+          g.gain.setValueAtTime(0.0001, t0);
+          g.gain.exponentialRampToValueAtTime(0.15, t0 + 0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.12);
+          o.connect(g); g.connect(audioCtx.destination);
+          o.start(t0); o.stop(t0 + 0.14);
+        }catch(e){}
+      }
 
-    <div class="hud-item bottom-right">
-        REC_TYPE: RAW_120<br>
-        BUFFER: 0.4s
-    </div>
+      // ---------- Elements ----------
+      const video = document.getElementById("video");
+      const overlay = document.getElementById("overlay");
+      const stage = document.getElementById("stage");
+      const dot = document.getElementById("dot");
+      const subline = document.getElementById("subline");
+      const modeLabel = document.getElementById("modeLabel");
+      const targetLabel = document.getElementById("targetLabel");
+      const hint = document.getElementById("hint");
 
-    <script>
-        const v = document.getElementById('v');
-        const reticle = document.getElementById('reticle');
-        const prompt = document.getElementById('snap-prompt');
-        const panel = document.getElementById('snapshot-panel');
-        const snapView = document.getElementById('snapshot-view');
-        let audioCtx;
+      const btnStart = document.getElementById("btnStart");
+      const btnStop  = document.getElementById("btnStop");
+      const btnGrid  = document.getElementById("btnGrid");
+      const btnLock  = document.getElementById("btnLock");
+      const btnSnap  = document.getElementById("btnSnap");
 
-        // Sound Synthesis
-        function playTone(freq, type, duration) {
-            if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = type;
-            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start();
-            osc.stop(audioCtx.currentTime + duration);
+      const zoomSlider = document.getElementById("zoom");
+      const zoomVal = document.getElementById("zoomVal");
+      const tray = document.getElementById("tray");
+
+      const modal = document.getElementById("modal");
+      const shotImg = document.getElementById("shotImg");
+      const shotMeta = document.getElementById("shotMeta");
+      const warnBox = document.getElementById("warnBox");
+      const btnClose = document.getElementById("btnClose");
+      const btnSave = document.getElementById("btnSave");
+      const btnCopy = document.getElementById("btnCopy");
+
+      // ---------- State ----------
+      let stream = null;
+      let track = null;
+      let facing = "environment";
+      let running = false;
+
+      let showGrid = false;
+      let locked = false;
+
+      // Target ROI in normalized coordinates (0..1)
+      let target = null; // {x,y,w,h, confidence}
+      let lastTap = null;
+
+      // Simple tracker internals (downscaled template matching)
+      const work = document.createElement("canvas");
+      const wctx = work.getContext("2d", { willReadFrequently: true });
+
+      const tmpl = document.createElement("canvas");
+      const tctx = tmpl.getContext("2d", { willReadFrequently: true });
+
+      let tmplData = null;
+      let tmplSize = 28;         // template px at low-res space
+      let searchRadius = 22;     // search radius px at low-res space
+      let lowW = 200, lowH = 150;
+
+      let rafId = null;
+      let zoomMode = "css";      // "track" if camera zoom supported
+
+      // snapshots
+      const shots = []; // {id, time, dataUrl, meta}
+      let lastShot = null;
+
+      // ---------- Helpers ----------
+      const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+      const nowStamp = () => new Date().toLocaleString(undefined, { hour12:false });
+
+      function setMode(text){
+        modeLabel.textContent = text;
+      }
+      function setTargetLabel(text){
+        targetLabel.textContent = text;
+      }
+
+      function setBtnState(btn, on){
+        btn.classList.toggle("off", !on);
+      }
+
+      function resizeOverlay(){
+        const r = stage.getBoundingClientRect();
+        overlay.width = Math.max(1, Math.floor(r.width * devicePixelRatio));
+        overlay.height = Math.max(1, Math.floor(r.height * devicePixelRatio));
+      }
+      window.addEventListener("resize", resizeOverlay);
+
+      function setVideoMirror(){
+        // Rear camera shouldn't mirror; front should.
+        const shouldMirror = (facing !== "environment");
+        video.style.transform = shouldMirror ? "scaleX(-1)" : "scaleX(1)";
+      }
+
+      function supportsGetUserMedia(){
+        return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+      }
+
+      function getTrackCapabilitiesSafe(){
+        try{ return track?.getCapabilities ? track.getCapabilities() : null; }catch(e){ return null; }
+      }
+      async function tryApplyTrackZoom(z){
+        if(!track || !track.applyConstraints) return false;
+        const caps = getTrackCapabilitiesSafe();
+        if(!caps || !caps.zoom) return false;
+        const zMin = caps.zoom.min ?? 1;
+        const zMax = caps.zoom.max ?? 1;
+        const zVal = clamp(z, zMin, zMax);
+        try{
+          await track.applyConstraints({ advanced: [{ zoom: zVal }] });
+          return true;
+        }catch(e){
+          return false;
+        }
+      }
+
+      function setZoomUI(v){
+        zoomVal.textContent = `${Number(v).toFixed(1)}×`;
+      }
+
+      function cssZoom(v){
+        // Scale around target if present, else center.
+        const z = Number(v);
+        const origin = target ? `${(target.x*100).toFixed(2)}% ${(target.y*100).toFixed(2)}%` : "50% 50%";
+        video.style.transformOrigin = origin;
+        // keep mirror handling: mirror already set via scaleX; combine:
+        const mirror = (facing !== "environment") ? -1 : 1;
+        video.style.transform = `scaleX(${mirror}) scale(${z})`;
+      }
+
+      function toStageNorm(clientX, clientY){
+        const r = stage.getBoundingClientRect();
+        return {
+          x: clamp((clientX - r.left) / r.width, 0, 1),
+          y: clamp((clientY - r.top) / r.height, 0, 1),
+        };
+      }
+
+      function roiFromPoint(p){
+        // Slightly rectangular ROI tuned for "object-ish" framing
+        const w = 0.22, h = 0.22;
+        return {
+          x: clamp(p.x, 0, 1),
+          y: clamp(p.y, 0, 1),
+          w, h,
+          confidence: 0.0
+        };
+      }
+
+      function drawOverlay(){
+        const ctx = overlay.getContext("2d");
+        const W = overlay.width, H = overlay.height;
+        ctx.clearRect(0,0,W,H);
+
+        // subtle vignette
+        const grad = ctx.createRadialGradient(W*0.5,H*0.5, Math.min(W,H)*0.22, W*0.5,H*0.5, Math.min(W,H)*0.72);
+        grad.addColorStop(0,"rgba(0,0,0,0)");
+        grad.addColorStop(1,"rgba(0,0,0,0.28)");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0,0,W,H);
+
+        // grid
+        if(showGrid){
+          ctx.save();
+          ctx.globalAlpha = 0.55;
+          ctx.lineWidth = Math.max(1, Math.floor(devicePixelRatio));
+          ctx.strokeStyle = "rgba(232,238,252,0.18)";
+          const cols = 10, rows = 8;
+          for(let i=1;i<cols;i++){
+            const x = (W/cols)*i;
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+          }
+          for(let j=1;j<rows;j++){
+            const y = (H/rows)*j;
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+          }
+          // center crosshair
+          ctx.globalAlpha = 0.85;
+          ctx.strokeStyle = "rgba(124,240,255,0.45)";
+          ctx.beginPath();
+          ctx.moveTo(W*0.5 - 18*devicePixelRatio, H*0.5);
+          ctx.lineTo(W*0.5 + 18*devicePixelRatio, H*0.5);
+          ctx.moveTo(W*0.5, H*0.5 - 18*devicePixelRatio);
+          ctx.lineTo(W*0.5, H*0.5 + 18*devicePixelRatio);
+          ctx.stroke();
+          ctx.restore();
         }
 
-        async function startApp() {
-            document.getElementById('init-screen').style.display = 'none';
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment', frameRate: { ideal: 120 } }
-            });
-            v.srcObject = stream;
-            v.play();
-            playTone(800, 'square', 0.1);
-            
-            animateHUD();
+        // target box
+        if(target){
+          const x = target.x * W;
+          const y = target.y * H;
+          const bw = target.w * W;
+          const bh = target.h * H;
+
+          const left = x - bw/2;
+          const top = y - bh/2;
+
+          // outer glow
+          ctx.save();
+          ctx.lineWidth = 2.2 * devicePixelRatio;
+          ctx.strokeStyle = locked ? "rgba(182,255,122,0.95)" : "rgba(124,240,255,0.95)";
+          ctx.shadowColor = locked ? "rgba(182,255,122,0.50)" : "rgba(124,240,255,0.50)";
+          ctx.shadowBlur = 18 * devicePixelRatio;
+
+          roundRect(ctx, left, top, bw, bh, 14*devicePixelRatio);
+          ctx.stroke();
+          ctx.restore();
+
+          // corner ticks
+          ctx.save();
+          ctx.lineWidth = 3.0 * devicePixelRatio;
+          ctx.strokeStyle = locked ? "rgba(182,255,122,0.85)" : "rgba(124,240,255,0.85)";
+          const t = 14*devicePixelRatio;
+          const s = 20*devicePixelRatio;
+          // TL
+          ctx.beginPath(); ctx.moveTo(left, top+t); ctx.lineTo(left, top); ctx.lineTo(left+t, top); ctx.stroke();
+          // TR
+          ctx.beginPath(); ctx.moveTo(left+bw-t, top); ctx.lineTo(left+bw, top); ctx.lineTo(left+bw, top+t); ctx.stroke();
+          // BL
+          ctx.beginPath(); ctx.moveTo(left, top+bh-t); ctx.lineTo(left, top+bh); ctx.lineTo(left+t, top+bh); ctx.stroke();
+          // BR
+          ctx.beginPath(); ctx.moveTo(left+bw-t, top+bh); ctx.lineTo(left+bw, top+bh); ctx.lineTo(left+bw, top+bh-t); ctx.stroke();
+          ctx.restore();
+
+          // tiny readout
+          ctx.save();
+          ctx.font = `${Math.floor(12*devicePixelRatio)}px ui-sans-serif, system-ui, -apple-system`;
+          ctx.fillStyle = "rgba(232,238,252,0.85)";
+          ctx.shadowColor = "rgba(0,0,0,0.45)";
+          ctx.shadowBlur = 10*devicePixelRatio;
+          const label = locked ? `LOCKED • ${(target.confidence*100|0)}%` : `READY`;
+          ctx.fillText(label, left + 12*devicePixelRatio, top - 10*devicePixelRatio);
+          ctx.restore();
+        }
+      }
+
+      function roundRect(ctx, x, y, w, h, r){
+        r = Math.min(r, w/2, h/2);
+        ctx.beginPath();
+        ctx.moveTo(x+r, y);
+        ctx.arcTo(x+w, y, x+w, y+h, r);
+        ctx.arcTo(x+w, y+h, x, y+h, r);
+        ctx.arcTo(x, y+h, x, y, r);
+        ctx.arcTo(x, y, x+w, y, r);
+        ctx.closePath();
+      }
+
+      // ---------- Tracking: basic template match around last location ----------
+      function initTemplateFromTarget(){
+        if(!target) return;
+        // draw video to low-res canvas
+        work.width = lowW; work.height = lowH;
+        wctx.drawImage(video, 0, 0, lowW, lowH);
+
+        const cx = Math.round(target.x * lowW);
+        const cy = Math.round(target.y * lowH);
+
+        tmpl.width = tmplSize; tmpl.height = tmplSize;
+        const sx = clamp(cx - (tmplSize/2|0), 0, lowW - tmplSize);
+        const sy = clamp(cy - (tmplSize/2|0), 0, lowH - tmplSize);
+        tctx.drawImage(work, sx, sy, tmplSize, tmplSize, 0, 0, tmplSize, tmplSize);
+
+        try{
+          tmplData = tctx.getImageData(0,0,tmplSize,tmplSize).data;
+        }catch(e){
+          tmplData = null;
+        }
+      }
+
+      function scoreAt(imgData, x, y){
+        // SAD over grayscale; lower is better
+        let sad = 0;
+        const w = lowW;
+        const tW = tmplSize, tH = tmplSize;
+        // sample every 2px for speed
+        for(let ty=0; ty<tH; ty+=2){
+          const iy = (y + ty) * w;
+          const tyOff = ty * tW;
+          for(let tx=0; tx<tW; tx+=2){
+            const i = ((iy + (x+tx)) * 4);
+            const r = imgData[i], g = imgData[i+1], b = imgData[i+2];
+            const gray = (r*0.299 + g*0.587 + b*0.114);
+
+            const j = ((tyOff + tx) * 4);
+            const tr = tmplData[j], tg = tmplData[j+1], tb = tmplData[j+2];
+            const tgray = (tr*0.299 + tg*0.587 + tb*0.114);
+
+            sad += Math.abs(gray - tgray);
+          }
+        }
+        return sad;
+      }
+
+      function trackStep(){
+        if(!locked || !target || !tmplData) return;
+
+        work.width = lowW; work.height = lowH;
+        wctx.drawImage(video, 0, 0, lowW, lowH);
+
+        let img;
+        try{
+          img = wctx.getImageData(0,0,lowW,lowH).data;
+        }catch(e){
+          // if blocked by some browser restriction, just keep target static
+          return;
         }
 
-        document.getElementById('interaction-layer').addEventListener('click', (e) => {
-            const x = e.clientX;
-            const y = e.clientY;
+        const cx = Math.round(target.x * lowW);
+        const cy = Math.round(target.y * lowH);
+        const half = tmplSize/2|0;
 
-            // Move Reticle
-            reticle.style.display = 'block';
-            reticle.style.left = x + 'px';
-            reticle.style.top = y + 'px';
-            
-            // UI Feedback
-            playTone(1200, 'sine', 0.05);
-            prompt.style.display = 'block';
-            
-            // Fake Data
-            document.getElementById('range-val').innerText = (Math.random() * 20 + 2).toFixed(1);
-            
-            if(window.navigator.vibrate) window.navigator.vibrate(10);
-        });
+        const sx0 = clamp(cx - searchRadius - half, 0, lowW - tmplSize);
+        const sy0 = clamp(cy - searchRadius - half, 0, lowH - tmplSize);
+        const sx1 = clamp(cx + searchRadius - half, 0, lowW - tmplSize);
+        const sy1 = clamp(cy + searchRadius - half, 0, lowH - tmplSize);
 
-        function takeSnapshot() {
-            const canvas = document.createElement('canvas');
-            canvas.width = 300;
-            canvas.height = 300;
-            const ctx = canvas.getContext('2d');
+        let bestX = sx0, bestY = sy0;
+        let best = Infinity;
 
-            // Logic to crop the video where the reticle is
-            const rect = reticle.getBoundingClientRect();
-            const videoRect = v.getBoundingClientRect();
-            
-            const scaleX = v.videoWidth / videoRect.width;
-            const scaleY = v.videoHeight / videoRect.height;
-            
-            const sourceX = (rect.left - videoRect.left) * scaleX;
-            const sourceY = (rect.top - videoRect.top) * scaleY;
-            const sourceSize = 100 * scaleX; // Zoomed area
-
-            ctx.drawImage(v, sourceX, sourceY, sourceSize, sourceSize, 0, 0, 300, 300);
-            
-            snapView.src = canvas.toDataURL();
-            panel.style.display = 'flex';
-            playTone(400, 'sawtooth', 0.2);
-            if(window.navigator.vibrate) window.navigator.vibrate([30, 50, 30]);
+        // step 2 px for speed
+        for(let y=sy0; y<=sy1; y+=2){
+          for(let x=sx0; x<=sx1; x+=2){
+            const s = scoreAt(img, x, y);
+            if(s < best){
+              best = s;
+              bestX = x;
+              bestY = y;
+            }
+          }
         }
 
-        function animateHUD() {
-            document.getElementById('azi-val').innerText = Math.floor(Math.random() * 360);
-            setTimeout(animateHUD, 500);
+        const nx = (bestX + half) / lowW;
+        const ny = (bestY + half) / lowH;
+
+        // confidence (rough): map SAD to 0..1
+        const maxSad = (tmplSize*tmplSize/4) * 255; // approximate upper
+        const conf = clamp(1 - (best / (maxSad*0.22)), 0, 1);
+
+        // smooth target movement
+        target.x = target.x * 0.78 + nx * 0.22;
+        target.y = target.y * 0.78 + ny * 0.22;
+        target.confidence = conf;
+
+        // update zoom origin for CSS zoom
+        if(zoomMode === "css"){
+          cssZoom(Number(zoomSlider.value));
         }
-    </script>
+      }
+
+      // ---------- Main render loop ----------
+      function loop(){
+        if(!running) return;
+        trackStep();
+        drawOverlay();
+        rafId = requestAnimationFrame(loop);
+      }
+
+      // ---------- Camera ----------
+      async function startCamera(){
+        if(!supportsGetUserMedia()){
+          subline.innerHTML = "This browser can’t access camera APIs. Use Safari and enable camera permissions.";
+          return;
+        }
+
+        clickSound("click");
+
+        // prefer environment camera
+        const constraints = {
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          }
+        };
+
+        try{
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+        }catch(e){
+          // fallback to any camera
+          stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
+          facing = "user";
+        }
+
+        video.srcObject = stream;
+        await video.play().catch(()=>{});
+
+        track = stream.getVideoTracks?.()[0] || null;
+
+        // detect facingMode if possible
+        try{
+          const settings = track?.getSettings?.() || {};
+          if(settings.facingMode) facing = settings.facingMode;
+        }catch(e){}
+
+        setVideoMirror();
+
+        // setup zoom mode: prefer true camera zoom if supported
+        zoomMode = "css";
+        const caps = getTrackCapabilitiesSafe();
+        if(caps && caps.zoom){
+          zoomMode = "track";
+          // set slider bounds from caps
+          const minZ = caps.zoom.min ?? 1;
+          const maxZ = caps.zoom.max ?? 6;
+          zoomSlider.min = String(minZ);
+          zoomSlider.max = String(maxZ);
+          zoomSlider.step = String(caps.zoom.step ?? 0.1);
+        }else{
+          // keep default 1..6 CSS zoom
+          zoomSlider.min = "1";
+          zoomSlider.max = "6";
+          zoomSlider.step = "0.1";
+        }
+
+        running = true;
+        dot.classList.add("on");
+        btnStop.classList.remove("off");
+        setBtnState(btnStart, true);
+
+        resizeOverlay();
+        setMode("Live");
+        subline.innerHTML = "Live • Tap to pick a target • Lock to track • Snapshots appear below";
+        hint.style.display = "block";
+
+        // reset states
+        target = null;
+        locked = false;
+        tmplData = null;
+        setBtnState(btnLock, false);
+        setBtnState(btnSnap, false);
+        setTargetLabel("None");
+
+        // set initial zoom
+        setZoomUI(zoomSlider.value);
+        if(zoomMode === "track") await tryApplyTrackZoom(Number(zoomSlider.value));
+        else cssZoom(Number(zoomSlider.value));
+
+        if(rafId) cancelAnimationFrame(rafId);
+        loop();
+      }
+
+      function stopCamera(){
+        clickSound("click");
+        running = false;
+        if(rafId) cancelAnimationFrame(rafId);
+        rafId = null;
+
+        if(stream){
+          try{ stream.getTracks().forEach(t => t.stop()); }catch(e){}
+        }
+        stream = null;
+        track = null;
+
+        dot.classList.remove("on");
+        setMode("Idle");
+        setTargetLabel("None");
+        subline.innerHTML = "Tap <b>Start</b> to arm camera • Tap to lock a target";
+        target = null;
+        locked = false;
+        tmplData = null;
+        setBtnState(btnGrid, showGrid);
+        setBtnState(btnLock, false);
+        setBtnState(btnSnap, false);
+        hint.style.display = "block";
+
+        // reset video transform
+        video.style.transform = "scaleX(-1)";
+        video.style.transformOrigin = "50% 50%";
+
+        // clear overlay
+        drawOverlay();
+      }
+
+      // ---------- Interaction ----------
+      function pickTargetFromTap(p){
+        target = roiFromPoint(p);
+        locked = false;
+        tmplData = null;
+        setMode("Armed");
+        setTargetLabel("Selected");
+        setBtnState(btnLock, true);
+        setBtnState(btnSnap, true);
+        clickSound("click");
+        if(zoomMode === "css"){
+          cssZoom(Number(zoomSlider.value));
+        }
+      }
+
+      function toggleLock(){
+        if(!target) return;
+        locked = !locked;
+        clickSound("lock");
+        if(locked){
+          initTemplateFromTarget();
+          setMode("Tracking");
+          setTargetLabel("Locked");
+          btnLock.textContent = "Unlock";
+          hint.innerHTML = "<b>Locked.</b> Tracking is running • Snapshot grabs a zoomed cutout";
+        }else{
+          setMode("Armed");
+          setTargetLabel("Selected");
+          btnLock.textContent = "Lock";
+          hint.innerHTML = "<b>Tap</b> to pick a target • <b>Lock</b> to track • <b>Snapshot</b> to capture a zoomed cutout";
+        }
+      }
+
+      function toggleGrid(){
+        showGrid = !showGrid;
+        clickSound("click");
+        setBtnState(btnGrid, showGrid);
+        btnGrid.textContent = showGrid ? "Grid On" : "Grid";
+      }
+
+      async function onZoomChanged(){
+        const z = Number(zoomSlider.value);
+        setZoomUI(z);
+
+        if(!running){
+          // still update css zoom for demo
+          cssZoom(z);
+          return;
+        }
+
+        if(zoomMode === "track"){
+          const ok = await tryApplyTrackZoom(z);
+          if(!ok){
+            zoomMode = "css";
+            cssZoom(z);
+          }
+        }else{
+          cssZoom(z);
+        }
+      }
+
+      // Snapshot: captures a zoomed ROI cutout (square) + stores a thumbnail
+      function takeSnapshot(){
+        if(!running || !video.videoWidth || !video.videoHeight){
+          return;
+        }
+        if(!target){
+          // if no target, center snapshot
+          target = { x: 0.5, y: 0.5, w: 0.28, h: 0.28, confidence: 0 };
+        }
+
+        clickSound("snap");
+
+        // Capture current frame into an offscreen canvas at full resolution
+        const vw = video.videoWidth;
+        const vh = video.videoHeight;
+
+        const cap = document.createElement("canvas");
+        const cctx = cap.getContext("2d");
+        cap.width = vw;
+        cap.height = vh;
+
+        // Note: We do NOT mirror the captured image (we want “real” camera orientation).
+        // However, if user cam is mirrored visually, this capture may look flipped. To keep it consistent,
+        // we’ll detect mirror and unflip if needed.
+        const isMirrored = (facing !== "environment"); // we mirror front cam in UI
+        if(isMirrored){
+          cctx.save();
+          cctx.translate(vw, 0);
+          cctx.scale(-1, 1);
+          cctx.drawImage(video, 0, 0, vw, vh);
+          cctx.restore();
+        }else{
+          cctx.drawImage(video, 0, 0, vw, vh);
+        }
+
+        // Build ROI in pixel coords
+        const cx = target.x * vw;
+        const cy = target.y * vh;
+        const side = Math.min(vw, vh) * clamp(Math.max(target.w, target.h) * 1.65, 0.22, 0.75);
+
+        let sx = clamp(cx - side/2, 0, vw - side);
+        let sy = clamp(cy - side/2, 0, vh - side);
+
+        // Create square cutout at a display-friendly size
+        const outSize = 900; // high-quality but still reasonable
+        const out = document.createElement("canvas");
+        const octx = out.getContext("2d");
+        out.width = outSize;
+        out.height = outSize;
+
+        // draw cutout
+        octx.drawImage(cap, sx, sy, side, side, 0, 0, outSize, outSize);
+
+        // overlay minimal "grid lock" decoration on the cutout
+        octx.save();
+        octx.globalAlpha = 0.35;
+        octx.strokeStyle = "rgba(232,238,252,0.45)";
+        octx.lineWidth = 2;
+        for(let i=1;i<6;i++){
+          const x = (outSize/6)*i;
+          octx.beginPath(); octx.moveTo(x,0); octx.lineTo(x,outSize); octx.stroke();
+          const y = (outSize/6)*i;
+          octx.beginPath(); octx.moveTo(0,y); octx.lineTo(outSize,y); octx.stroke();
+        }
+        // center cross
+        octx.globalAlpha = 0.7;
+        octx.strokeStyle = "rgba(124,240,255,0.8)";
+        octx.beginPath();
+        octx.moveTo(outSize*0.5-42, outSize*0.5);
+        octx.lineTo(outSize*0.5+42, outSize*0.5);
+        octx.moveTo(outSize*0.5, outSize*0.5-42);
+        octx.lineTo(outSize*0.5, outSize*0.5+42);
+        octx.stroke();
+        octx.restore();
+
+        const dataUrl = out.toDataURL("image/jpeg", 0.92);
+        const id = crypto?.randomUUID?.() || String(Date.now());
+        const meta = {
+          time: nowStamp(),
+          locked,
+          confidence: target.confidence ?? 0,
+          zoom: Number(zoomSlider.value).toFixed(1) + "×",
+        };
+
+        const shot = { id, time: meta.time, dataUrl, meta };
+        shots.unshift(shot);
+        lastShot = shot;
+
+        renderTray();
+
+        // open modal preview
+        openModal(shot);
+
+        // subtle UI feedback
+        hint.innerHTML = "<b>Snapshot saved.</b> Tap another target or keep tracking.";
+      }
+
+      function renderTray(){
+        tray.innerHTML = "";
+        for(let i=0;i<Math.min(shots.length, 18); i++){
+          const s = shots[i];
+          const div = document.createElement("div");
+          div.className = "thumb";
+          div.innerHTML = `<img alt="Snapshot ${i+1}" src="${s.dataUrl}"><div class="tag">${i+1}</div>`;
+          div.addEventListener("click", () => { clickSound("click"); openModal(s); });
+          tray.appendChild(div);
+        }
+      }
+
+      function openModal(shot){
+        modal.classList.add("on");
+        shotImg.src = shot.dataUrl;
+        shotMeta.textContent = `${shot.meta.time} • ${shot.meta.zoom} • ${shot.meta.locked ? "Locked" : "Free"} • ${(shot.meta.confidence*100|0)}%`;
+        warnBox.style.display = "none";
+
+        // set save link behavior
+        btnSave.onclick = () => {
+          clickSound("click");
+          const a = document.createElement("a");
+          a.href = shot.dataUrl;
+          a.download = `field-lens-${shot.id}.jpg`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        };
+
+        btnCopy.onclick = async () => {
+          clickSound("click");
+          warnBox.style.display = "none";
+          try{
+            if(!navigator.clipboard || !window.ClipboardItem){
+              throw new Error("Clipboard image copy not supported here.");
+            }
+            const res = await fetch(shot.dataUrl);
+            const blob = await res.blob();
+            await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+            warnBox.style.display = "block";
+            warnBox.textContent = "Copied to clipboard (if iOS allows it for this site).";
+          }catch(e){
+            warnBox.style.display = "block";
+            warnBox.textContent = "Copy isn’t available in this Safari context. Use Save instead (then share from Photos).";
+          }
+        };
+      }
+
+      function closeModal(){
+        clickSound("click");
+        modal.classList.remove("on");
+      }
+
+      // ---------- Event wiring ----------
+      btnStart.addEventListener("click", async () => {
+        if(running) return;
+        await startCamera();
+      });
+
+      btnStop.addEventListener("click", () => {
+        if(!running) return;
+        stopCamera();
+      });
+
+      btnGrid.addEventListener("click", () => {
+        toggleGrid();
+      });
+
+      btnLock.addEventListener("click", () => {
+        if(!target) return;
+        toggleLock();
+        setBtnState(btnLock, true);
+      });
+
+      btnSnap.addEventListener("click", () => {
+        takeSnapshot();
+      });
+
+      zoomSlider.addEventListener("input", onZoomChanged);
+      zoomSlider.addEventListener("change", onZoomChanged);
+
+      btnClose.addEventListener("click", closeModal);
+      modal.addEventListener("click", (e) => {
+        if(e.target === modal) closeModal();
+      });
+
+      // Tap / drag to move target
+      let dragging = false;
+
+      function onPointerDown(e){
+        if(!running){
+          // allow “demo tap” before start: set target anyway
+          const p = toStageNorm(e.clientX, e.clientY);
+          pickTargetFromTap(p);
+          return;
+        }
+        dragging = true;
+        const p = toStageNorm(e.clientX, e.clientY);
+        lastTap = p;
+
+        // If locked, unlock on new tap then reselect
+        if(locked){
+          locked = false;
+          tmplData = null;
+          btnLock.textContent = "Lock";
+          setMode("Armed");
+        }
+
+        pickTargetFromTap(p);
+      }
+
+      function onPointerMove(e){
+        if(!dragging || !target) return;
+        const p = toStageNorm(e.clientX, e.clientY);
+        // drag moves target
+        target.x = p.x;
+        target.y = p.y;
+        target.confidence = 0;
+        if(zoomMode === "css"){
+          cssZoom(Number(zoomSlider.value));
+        }
+      }
+
+      function onPointerUp(){
+        dragging = false;
+      }
+
+      // Use Pointer Events (iOS Safari supports them in modern versions)
+      stage.addEventListener("pointerdown", onPointerDown, { passive: true });
+      stage.addEventListener("pointermove", onPointerMove, { passive: true });
+      stage.addEventListener("pointerup", onPointerUp, { passive: true });
+      stage.addEventListener("pointercancel", onPointerUp, { passive: true });
+
+      // Init UI defaults
+      setBtnState(btnGrid, false);
+      setBtnState(btnLock, false);
+      setBtnState(btnSnap, false);
+      setBtnState(btnStop, false);
+      setZoomUI(zoomSlider.value);
+      resizeOverlay();
+      drawOverlay();
+
+      // If page becomes hidden, stop camera (prevents iOS camera freeze quirks)
+      document.addEventListener("visibilitychange", () => {
+        if(document.hidden && running){
+          stopCamera();
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
