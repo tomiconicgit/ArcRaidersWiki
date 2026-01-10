@@ -4,489 +4,162 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#000000">
-    <title>OMNI_SCAN // V2</title>
+    <title>CHRONOS_LAPSE // 120FPS</title>
     <style>
         body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: #000;
-            font-family: "Courier New", Courier, monospace;
-            user-select: none;
-            -webkit-user-select: none;
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background: #000;
+            font-family: -apple-system, system-ui, sans-serif;
         }
 
-        /* Fullscreen WebGL Canvas */
         canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
-        }
-
-        /* --- UI Overlay Layer --- */
-        #ui-layer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 10;
-            pointer-events: none; /* Let clicks pass to canvas */
-        }
-
-        /* Mode Switcher (Bottom) */
-        .mode-bar {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 15px;
-            background: rgba(0, 0, 0, 0.6);
-            padding: 10px 20px;
-            border-radius: 30px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            pointer-events: auto;
-            backdrop-filter: blur(10px);
-        }
-
-        .mode-btn {
-            background: none;
-            border: none;
-            color: #555;
-            font-weight: 800;
-            font-size: 14px;
-            cursor: pointer;
-            text-transform: uppercase;
-            padding: 5px 10px;
-            transition: color 0.2s;
-        }
-
-        .mode-btn.active {
-            color: #00ff41; /* Default Green */
-            text-shadow: 0 0 8px currentColor;
-        }
-
-        /* Specific Colors for Active States */
-        .mode-btn[data-mode="0"].active { color: #00ff41; } /* LiDAR */
-        .mode-btn[data-mode="1"].active { color: #ff3333; } /* Thermal */
-        .mode-btn[data-mode="2"].active { color: #88ff88; } /* Night */
-        .mode-btn[data-mode="3"].active { color: #00ccff; } /* 3D */
-
-        /* HUD Elements */
-        .hud-text {
-            position: absolute;
-            color: rgba(255, 255, 255, 0.7);
-            font-size: 12px;
-            font-weight: bold;
-            pointer-events: none;
-        }
-
-        .top-left { top: 20px; left: 20px; border-left: 2px solid currentColor; padding-left: 10px; }
-        .top-right { top: 20px; right: 20px; text-align: right; border-right: 2px solid currentColor; padding-right: 10px; }
-
-        /* --- Target Lock / Zoom Modal --- */
-        #target-modal {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) scale(0.8);
-            width: 300px;
-            height: 300px;
-            background: rgba(0, 10, 0, 0.95);
-            border: 2px solid #00ff41;
-            box-shadow: 0 0 30px rgba(0, 255, 65, 0.2);
-            z-index: 100;
-            display: none; /* Hidden by default */
-            flex-direction: column;
-            pointer-events: auto;
-            opacity: 0;
-            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-
-        #target-modal.open {
-            display: flex;
-            opacity: 1;
-            transform: translate(-50%, -50%) scale(1);
-        }
-
-        .target-header {
-            padding: 10px;
-            background: rgba(0, 255, 65, 0.2);
-            color: #00ff41;
-            font-size: 12px;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .target-img-container {
-            flex: 1;
-            position: relative;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        #target-snapshot {
-            width: 100%;
-            height: 100%;
+            width: 100vw; height: 100vh;
             object-fit: cover;
-            filter: grayscale(100%) sepia(100%) hue-rotate(90deg) contrast(1.2); /* Matrix look */
+            filter: contrast(1.1) saturate(1.2);
         }
 
-        .target-overlay {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background:
-                linear-gradient(90deg, rgba(0,255,65,0.3) 1px, transparent 1px),
-                linear-gradient(rgba(0,255,65,0.3) 1px, transparent 1px);
-            background-size: 20px 20px;
-            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
-            pointer-events: none;
+        #ui {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 10;
+            display: flex; flex-direction: column; justify-content: space-between;
+            padding: calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 20px);
+            box-sizing: border-box;
         }
 
-        .close-target {
-            width: 100%;
-            padding: 15px;
-            background: #00ff41;
-            color: black;
-            border: none;
-            font-weight: bold;
-            font-size: 14px;
-            cursor: pointer;
+        .hud-label {
+            color: #fff; font-size: 10px; letter-spacing: 2px;
+            text-transform: uppercase; opacity: 0.7;
         }
 
-        /* Start Button */
-        #init-btn {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 200;
-            padding: 20px 40px;
-            background: #fff;
-            color: #000;
-            font-size: 18px;
-            font-weight: 900;
-            letter-spacing: 2px;
-            border: none;
-            cursor: pointer;
+        .controls {
+            pointer-events: auto; display: flex; justify-content: center; gap: 20px;
         }
 
+        .btn {
+            background: rgba(255,255,255,0.1); border: 1px solid #fff;
+            color: #fff; padding: 12px 24px; border-radius: 30px;
+            backdrop-filter: blur(10px); font-size: 12px; font-weight: bold;
+        }
+
+        .btn:active { background: #fff; color: #000; }
+
+        #start-screen {
+            position: fixed; inset: 0; z-index: 100;
+            background: #000; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; color: #fff;
+        }
+
+        .scan-line {
+            position: absolute; top: 0; width: 2px; height: 100%;
+            background: rgba(255,0,0,0.5); z-index: 5;
+            box-shadow: 0 0 10px red;
+        }
     </style>
 </head>
 <body>
 
-    <video id="webcam" playsinline style="display:none;"></video>
-    
-    <canvas id="glCanvas"></canvas>
+    <div id="start-screen">
+        <h1 style="letter-spacing: 10px;">CHRONOS</h1>
+        <p style="opacity: 0.5;">LOCKING 120FPS ENGINE...</p>
+        <button class="btn" onclick="init()">START SCANNER</button>
+    </div>
 
-    <div id="ui-layer">
-        <div class="hud-text top-left">
-            SYS: OMNI_V2<br>
-            BAT: 98%<br>
-            GPS: ACTIVE
-        </div>
-        <div class="hud-text top-right">
-            <span id="fps">60 FPS</span><br>
-            T-MINUS: 00:00
+    <div id="ui">
+        <div style="display:flex; justify-content: space-between;">
+            <div class="hud-label">MODE: SLIT-SCAN<br>FPS: <span id="fps-val">120</span></div>
+            <div class="hud-label" style="text-align:right;">BUFF: ACTIVE<br>SENS: HIGH</div>
         </div>
 
-        <div class="mode-bar">
-            <button class="mode-btn active" data-mode="0" onclick="setMode(0)">LiDAR</button>
-            <button class="mode-btn" data-mode="1" onclick="setMode(1)">THERMAL</button>
-            <button class="mode-btn" data-mode="2" onclick="setMode(2)">NIGHT</button>
-            <button class="mode-btn" data-mode="3" onclick="setMode(3)">GRID</button>
+        <div class="controls">
+            <button class="btn" onclick="resetCanvas()">CLEAR BUFFER</button>
+            <button class="btn" onclick="toggleDirection()">FLIP FLOW</button>
         </div>
     </div>
 
-    <div id="target-modal">
-        <div class="target-header">
-            <span>TARGET LOCKED</span>
-            <span id="target-coords">XY: 00.00</span>
-        </div>
-        <div class="target-img-container">
-            <img id="target-snapshot" src="">
-            <div class="target-overlay"></div>
-            <div style="position:absolute; width:20px; height:2px; background:#00ff41;"></div>
-            <div style="position:absolute; width:2px; height:20px; background:#00ff41;"></div>
-        </div>
-        <button class="close-target" onclick="closeTarget()">DISMISS TARGET</button>
-    </div>
-
-    <button id="init-btn" onclick="startSystem()">INITIALIZE OPTICS</button>
+    <div id="scan-bar" class="scan-line"></div>
+    <canvas id="mainCanvas"></canvas>
+    <video id="v" playsinline style="display:none"></video>
 
     <script>
-        // --- Configuration & State ---
-        let gl, program;
-        let video = document.getElementById('webcam');
-        let canvas = document.getElementById('glCanvas');
-        let texture;
-        let currentMode = 0; // 0=LiDAR, 1=Thermal, 2=Night, 3=Grid
+        let canvas = document.getElementById('mainCanvas');
+        let ctx = canvas.getContext('2d', {alpha: false});
+        let video = document.getElementById('v');
+        let scanBar = document.getElementById('scan-bar');
         
-        // --- 1. The Super Shader (Handles all modes) ---
-        const vertexShaderSource = `
-            attribute vec2 position;
-            varying vec2 vUv;
-            void main() {
-                vUv = position * 0.5 + 0.5;
-                vUv.y = 1.0 - vUv.y; 
-                gl_Position = vec4(position, 0.0, 1.0);
-            }
-        `;
+        let x = 0;
+        let direction = 1; // 1 = Left to Right, -1 = Right to Left
+        let isRunning = false;
 
-        const fragmentShaderSource = `
-            precision mediump float;
-            varying vec2 vUv;
-            uniform sampler2D uTexture;
-            uniform vec2 uResolution;
-            uniform int uMode;
-            uniform float uTime;
-
-            // Helper: Luminance
-            float getLum(vec4 c) { return dot(c.rgb, vec3(0.299, 0.587, 0.114)); }
-
-            // Helper: Thermal Gradient
-            vec3 thermal(float lum) {
-                // Blue -> Cyan -> Green -> Yellow -> Red -> White
-                vec3 a = vec3(0.0, 0.0, 1.0);
-                vec3 b = vec3(1.0, 1.0, 0.0);
-                vec3 c = vec3(1.0, 0.0, 0.0);
-                
-                if (lum < 0.5) return mix(a, b, lum * 2.0);
-                else return mix(b, c, (lum - 0.5) * 2.0);
-            }
-
-            // Helper: Noise
-            float rand(vec2 co){
-                return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
-            }
-
-            void main() {
-                vec2 onePixel = vec2(1.0, 1.0) / uResolution;
-                vec4 texel = texture2D(uTexture, vUv);
-                float lum = getLum(texel);
-
-                // --- MODE 0: LiDAR (Edge Detection) ---
-                if (uMode == 0) {
-                     vec4 n[9];
-                     // 3x3 kernel lookup for simple edge detection
-                     for(int i=-1; i<=1; i++) {
-                        for(int j=-1; j<=1; j++) {
-                            n[(i+1)*3 + (j+1)] = texture2D(uTexture, vUv + vec2(float(i), float(j)) * onePixel);
-                        }
-                     }
-                     // Sobel X & Y
-                     vec4 sobel_h = n[2] + (2.0*n[5]) + n[8] - (n[0] + (2.0*n[3]) + n[6]);
-                     vec4 sobel_v = n[0] + (2.0*n[1]) + n[2] - (n[6] + (2.0*n[7]) + n[8]);
-                     float edge = length(vec2(length(sobel_h.rgb), length(sobel_v.rgb)));
-                     
-                     // Green glow on edges, black background
-                     gl_FragColor = vec4(0.0, edge * 1.5, edge * 0.5, 1.0);
-                } 
-                
-                // --- MODE 1: THERMAL ---
-                else if (uMode == 1) {
-                    // Boost contrast for heat effect
-                    float heatVal = smoothstep(0.1, 0.9, lum);
-                    vec3 heatColor = thermal(heatVal);
-                    gl_FragColor = vec4(heatColor, 1.0);
+        async function init() {
+            document.getElementById('start-screen').style.display = 'none';
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { 
+                    facingMode: 'environment',
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    frameRate: { ideal: 120 } 
                 }
-
-                // --- MODE 2: NIGHT VISION ---
-                else if (uMode == 2) {
-                    float noise = rand(vUv * uTime) * 0.1;
-                    // Green amplifier
-                    vec3 night = vec3(0.0, lum * 1.5 + noise, 0.0);
-                    
-                    // Vignette
-                    float dist = distance(vUv, vec2(0.5));
-                    night *= smoothstep(0.8, 0.2, dist);
-                    
-                    gl_FragColor = vec4(night, 1.0);
-                }
-
-                // --- MODE 3: 3D GRID / MATRIX ---
-                else if (uMode == 3) {
-                    // Create a grid
-                    float tiles = 30.0;
-                    vec2 gridPos = fract(vUv * tiles);
-                    
-                    // Distort grid based on brightness (Fake depth)
-                    float distortion = lum * 0.2;
-                    
-                    float line = step(0.9, gridPos.x + distortion) + step(0.9, gridPos.y + distortion);
-                    
-                    vec3 gridColor = vec3(0.0, 0.8, 1.0) * line;
-                    gl_FragColor = vec4(gridColor * lum, 1.0); // Multiply by lum to hide grid in shadows
-                }
-            }
-        `;
-
-        // --- 2. System Logic ---
-        
-        async function startSystem() {
-            document.getElementById('init-btn').style.display = 'none';
-            try {
-                // Use back camera
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'environment', width: 1280, height: 720 } 
-                });
-                video.srcObject = stream;
-                await video.play();
-
-                // Setup WebGL
-                initWebGL();
-                
-                // Start Loop
-                render();
-
-                // Add Tap Listener for Zoom
-                canvas.addEventListener('click', handleTap);
-
-            } catch (e) {
-                alert("Camera Error: " + e.message);
-            }
-        }
-
-        function initWebGL() {
-            gl = canvas.getContext('webgl');
+            });
+            video.srcObject = stream;
+            video.play();
             
-            // Compile Shaders
-            const vs = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
-            const fs = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
-            program = createProgram(gl, vs, fs);
-            gl.useProgram(program);
-
-            // Set Geometry (Fullscreen Quad)
-            const buffer = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
-            
-            const posLoc = gl.getAttribLocation(program, "position");
-            gl.enableVertexAttribArray(posLoc);
-            gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-
-            // Create Texture
-            texture = gl.createTexture();
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        }
-
-        function render(time) {
-            if(!gl) return;
-
-            // Resize if needed
-            if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+            video.onloadedmetadata = () => {
                 canvas.width = window.innerWidth;
                 canvas.height = window.innerHeight;
-                gl.viewport(0, 0, canvas.width, canvas.height);
+                isRunning = true;
+                requestAnimationFrame(loop);
+            };
+        }
+
+        function loop() {
+            if (!isRunning) return;
+
+            // Calculate current "Slit"
+            // We take a thin slice from the center of the camera feed
+            const sliceWidth = 2;
+            const camSliceX = video.videoWidth / 2;
+            
+            // Draw that slice onto our canvas at position X
+            ctx.drawImage(
+                video, 
+                camSliceX, 0, sliceWidth, video.videoHeight, // Source
+                x, 0, sliceWidth, canvas.height // Destination
+            );
+
+            // Update X position for the next frame
+            x += (sliceWidth * direction);
+
+            // Wrap around logic
+            if (x > canvas.width) x = 0;
+            if (x < 0) x = canvas.width;
+
+            // Move the visual scan bar
+            scanBar.style.left = x + 'px';
+
+            // Haptic feedback every time we cross the center
+            if (Math.abs(x - canvas.width/2) < 2) {
+                if (window.navigator.vibrate) window.navigator.vibrate(10);
             }
 
-            // Update Texture
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
-
-            // Update Uniforms
-            gl.uniform2f(gl.getUniformLocation(program, "uResolution"), canvas.width, canvas.height);
-            gl.uniform1i(gl.getUniformLocation(program, "uMode"), currentMode);
-            gl.uniform1f(gl.getUniformLocation(program, "uTime"), time * 0.001);
-
-            // Draw
-            gl.drawArrays(gl.TRIANGLES, 0, 3);
-            
-            requestAnimationFrame(render);
+            requestAnimationFrame(loop);
         }
 
-        // --- 3. Mode Switcher ---
-        function setMode(mode) {
-            currentMode = mode;
-            
-            // Update Buttons UI
-            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-            document.querySelector(`.mode-btn[data-mode="${mode}"]`).classList.add('active');
-            
-            // Trigger Haptic
-            if(window.navigator.vibrate) window.navigator.vibrate(50);
+        function resetCanvas() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            x = (direction === 1) ? 0 : canvas.width;
         }
 
-        // --- 4. Tap to Target Logic ---
-        function handleTap(e) {
-            const modal = document.getElementById('target-modal');
-            const snapshotImg = document.getElementById('target-snapshot');
-            const coordSpan = document.getElementById('target-coords');
-            
-            // 1. Calculate click position ratio
-            const rect = canvas.getBoundingClientRect();
-            const xRatio = (e.clientX - rect.left) / rect.width;
-            const yRatio = (e.clientY - rect.top) / rect.height;
-
-            // 2. Capture frame to temporary canvas
-            const tempCanvas = document.createElement('canvas');
-            const ctx = tempCanvas.getContext('2d');
-            
-            // Match video resolution
-            tempCanvas.width = video.videoWidth;
-            tempCanvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0);
-
-            // 3. Crop area around the tap (Zoom effect)
-            // Define zoom window size (e.g., 20% of video)
-            const zoomW = video.videoWidth * 0.3;
-            const zoomH = video.videoHeight * 0.3;
-            const cropX = Math.max(0, Math.min(video.videoWidth - zoomW, (xRatio * video.videoWidth) - (zoomW/2)));
-            const cropY = Math.max(0, Math.min(video.videoHeight - zoomH, (yRatio * video.videoHeight) - (zoomH/2)));
-
-            // 4. Create zoomed image
-            const finalCanvas = document.createElement('canvas');
-            finalCanvas.width = 300;
-            finalCanvas.height = 300;
-            const fCtx = finalCanvas.getContext('2d');
-            fCtx.drawImage(tempCanvas, cropX, cropY, zoomW, zoomH, 0, 0, 300, 300);
-
-            // 5. Update and Show Modal
-            snapshotImg.src = finalCanvas.toDataURL();
-            
-            // Stylize the modal based on current mode
-            if(currentMode === 1) snapshotImg.style.filter = "contrast(1.5) hue-rotate(180deg)"; // Thermal look
-            else if(currentMode === 2) snapshotImg.style.filter = "sepia(1) hue-rotate(50deg) saturate(3)"; // Night look
-            else snapshotImg.style.filter = "grayscale(100%) sepia(100%) hue-rotate(90deg) contrast(1.2)"; // LiDAR look
-
-            coordSpan.innerText = `XY: ${Math.floor(xRatio*100)}.${Math.floor(yRatio*100)}`;
-            modal.classList.add('open');
-
-            // Sound/Haptic
-            if(window.navigator.vibrate) window.navigator.vibrate([50, 50, 50]);
+        function toggleDirection() {
+            direction *= -1;
+            if (window.navigator.vibrate) window.navigator.vibrate(50);
         }
 
-        function closeTarget() {
-            document.getElementById('target-modal').classList.remove('open');
-        }
-
-        // --- Utils ---
-        function createShader(gl, type, src) {
-            const s = gl.createShader(type);
-            gl.shaderSource(s, src);
-            gl.compileShader(s);
-            if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-                console.error(gl.getShaderInfoLog(s)); gl.deleteShader(s); return null;
-            } return s;
-        }
-        function createProgram(gl, vs, fs) {
-            const p = gl.createProgram();
-            gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p); return p;
-        }
-
+        // Handle orientation changes
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
     </script>
 </body>
 </html>
