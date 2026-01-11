@@ -27,12 +27,13 @@ export async function detectFrame(videoEl, minScore = 0.55) {
   return preds.filter(p => (p.score ?? 0) >= minScore);
 }
 
-export function drawDetections(overlayCanvas, detections, videoEl) {
-  const ctx = overlayCanvas.getContext("2d");
+/**
+ * Draws detections into the overlay canvas context.
+ * IMPORTANT: does not clear the canvas — caller should clear once per frame.
+ */
+export function drawDetections(ctx, overlayCanvas, detections, videoEl) {
   const W = overlayCanvas.width;
   const H = overlayCanvas.height;
-
-  ctx.clearRect(0, 0, W, H);
 
   const vw = videoEl.videoWidth || 1280;
   const vh = videoEl.videoHeight || 720;
