@@ -21,7 +21,12 @@ export async function startCamera(videoEl) {
   });
 
   await videoEl.play();
-  return stream;
+
+  const track = stream.getVideoTracks?.()[0] || null;
+  const capabilities = track?.getCapabilities ? track.getCapabilities() : {};
+  const settings = track?.getSettings ? track.getSettings() : {};
+
+  return { stream, track, capabilities, settings };
 }
 
 export function stopCamera(videoEl) {
