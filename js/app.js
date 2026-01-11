@@ -1,721 +1,427 @@
-/**
- * app.js - Pocket Vision HUD (GitHub Pages / iPhone Safari)
- * - Camera AR-style overlay (getUserMedia)
- * - Draggable / resizable widgets (dashboard tools)
- * - Tap-to-inspect snapshot: crops around tap point + magnifies into viewer
- * - Device orientation parallax (when permitted)
- */
+// js/app.js — WORKING with YOUR index.html + css/styles.css
+// - Start camera (iPhone Safari)
+// - Optional motion (heading/pitch)
+// - AI toggle (COCO-SSD via vision.js)
+// - Tap-to-snap + Snap button
+// - Gallery panel + Inspect panel (uses ui.js + storage.js)
+
+import { startCamera as camStart, stopCamera as camStop, captureToCanvas } from "./camera.js";
+import { saveSnap, listSnaps, deleteSnap } from "./storage.js";
+import { createPanel, setPanelBody, getPanelBody } from "./ui.js";
+import { loadVisionModel, isVisionReady, detectFrame, drawDetections, pickDetectionAt } from "./vision.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
-const state = {
-  stream: null,
-  videoTrack: null,
-  isStreaming: false,
-  torchOn: false,
-  facingMode: "environment",
-  zoom: 1,
-  maxZoom: 1,
-  minZoom: 1,
-  focusSupported: false,
-  orientation: { beta: 0, gamma: 0, alpha: 0 },
-  orientationPermitted: false,
+const els = {
+  app: $("#app"),
+  cam: $("#cam"),
+  overlay: $("#overlay"),
+
+  hudStatus: $("#hudStatus"),
+  hudFps: $("#hudFps"),
+  hudHeading: $("#hudHeading"),
+  hudPitch: $("#hudPitch"),
+
+  btnStart: $("#btnStart"),
+  btnAI: $("#btnAI"),
+  btnSnap: $("#btnSnap"),
+  btnGallery: $("#btnGallery"),
+  btnPanels: $("#btnPanels"),
+
+  sheet: $("#sheet"),
+  btnPerms: $("#btnPerms"),
+  btnCloseSheet: $("#btnCloseSheet"),
 };
 
-init().catch(console.error);
+const state = {
+  stream: null,
+  streaming: false,
 
-async function init() {
-  // Service worker
+  aiOn: false,
+  aiLooping: false,
+  detections: [],
+  lastAiTs: 0,
+  aiFps: 0,
+
+  motionOn: false,
+  beta: 0,   // pitch-ish
+  alpha: 0,  // heading-ish (not true compass on all iPhones)
+};
+
+boot().catch(console.error);
+
+async function boot() {
+  // Canvas size
+  sizeOverlay();
+  window.addEventListener("resize", sizeOverlay);
+
+  // SW register (safe)
   if ("serviceWorker" in navigator) {
     try {
       await navigator.serviceWorker.register("./sw.js", { scope: "./" });
     } catch (e) {
-      console.warn("SW registration failed:", e);
+      console.warn("SW register failed:", e);
     }
   }
 
-  wireUI();
-  await warmStartCamera();
-  await tryEnableOrientation();
-  updateStatus("Ready");
+  // Wire UI
+  els.btnStart?.addEventListener("click", onStartPressed);
+  els.btnPerms?.addEventListener("click", grantPermissionsAndStart);
+  els.btnCloseSheet?.addEventListener("click", () => hideSheet());
+
+  els.btnAI?.addEventListener("click", toggleAI);
+  els.btnSnap?.addEventListener("click", () => snapAt("center"));
+  els.btnGallery?.addEventListener("click", openGalleryPanel);
+  els.btnPanels?.addEventListener("click", openDashboardPanel);
+
+  // Tap on camera to snap at tap point
+  els.cam?.addEventListener("pointerdown", (e) => {
+    // Don’t block scroll; we’re full-screen anyway.
+    snapAt({ x: e.clientX, y: e.clientY });
+  });
+
+  setHudStatus("Idle — tap Start");
+  setHudFps("--");
+  setHudHeading("--");
+  setHudPitch("--");
 }
 
-function wireUI() {
-  // Buttons
-  $("#btnCamera")?.addEventListener("click", () => toggleCamera());
-  $("#btnFlip")?.addEventListener("click", () => flipCamera());
-  $("#btnTorch")?.addEventListener("click", () => toggleTorch());
-  $("#btnSnapshot")?.addEventListener("click", () => snapshotCenterInspect());
-  $("#btnAddWidget")?.addEventListener("click", () => addWidgetMenu());
-
-  // Slider controls
-  $("#zoom")?.addEventListener("input", (e) => setZoom(Number(e.target.value)));
-
-  // Tap on viewport => inspect snapshot around tap
-  const viewport = $("#viewport");
-  viewport?.addEventListener("pointerdown", onViewportPointerDown, { passive: false });
-
-  // Make widgets draggable/resizable
-  enableWidgetInteractions($("#hud"));
-
-  // Clock widget ticks
-  setInterval(() => {
-    const el = $("#clockValue");
-    if (!el) return;
-    const d = new Date();
-    el.textContent = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  }, 500);
-
-  // Demo stats updating
-  setInterval(() => {
-    const users = $("#statUsers");
-    const fps = $("#statFps");
-    if (users) users.textContent = `${(9800 + Math.floor(Math.random() * 2000)).toLocaleString()} / day`;
-    if (fps) fps.textContent = `${(55 + Math.floor(Math.random() * 5))} fps`;
-  }, 1200);
+// ---------- UI helpers ----------
+function setHudStatus(t) {
+  if (els.hudStatus) els.hudStatus.textContent = t;
+}
+function setHudFps(t) {
+  if (els.hudFps) els.hudFps.textContent = `AI: ${t} fps`;
+}
+function setHudHeading(deg) {
+  if (els.hudHeading) els.hudHeading.textContent = `Heading: ${deg}°`;
+}
+function setHudPitch(deg) {
+  if (els.hudPitch) els.hudPitch.textContent = `Pitch: ${deg}°`;
 }
 
-async function warmStartCamera() {
-  // Try to start camera immediately (user gesture sometimes required on iOS; if fails, user presses button)
+function showSheet() {
+  els.sheet?.classList.remove("hidden");
+}
+function hideSheet() {
+  els.sheet?.classList.add("hidden");
+}
+
+function sizeOverlay() {
+  if (!els.overlay) return;
+  const dpr = window.devicePixelRatio || 1;
+  els.overlay.width = Math.floor(window.innerWidth * dpr);
+  els.overlay.height = Math.floor(window.innerHeight * dpr);
+  els.overlay.style.width = "100%";
+  els.overlay.style.height = "100%";
+}
+
+// ---------- Start / Permissions ----------
+async function onStartPressed() {
+  // iOS Safari usually wants user gesture before camera + motion perms
+  showSheet();
+}
+
+async function grantPermissionsAndStart() {
+  hideSheet();
+  await startStream();
+  await enableMotion(); // optional; if denied, app still works
+  setHudStatus("Camera live");
+}
+
+async function startStream() {
+  if (state.streaming) return;
+  if (!els.cam) throw new Error("Missing #cam video element");
+
   try {
-    await startCamera();
+    state.stream = await camStart(els.cam);
+    state.streaming = true;
+    setHudStatus("Camera live");
+
+    // Clear overlay once camera is live
+    clearOverlay();
   } catch (e) {
-    updateStatus("Tap “Camera” to start");
+    console.error(e);
+    setHudStatus("Camera blocked — allow permissions in Safari");
+    throw e;
   }
 }
 
-async function toggleCamera() {
-  if (state.isStreaming) {
-    stopCamera();
-    updateStatus("Camera stopped");
-  } else {
-    await startCamera();
-    updateStatus("Camera live");
-  }
-}
-
-async function startCamera() {
-  stopCamera();
-
-  // iOS Safari: best to request ideal constraints and then check capabilities
-  const constraints = {
-    audio: false,
-    video: {
-      facingMode: state.facingMode,
-      width: { ideal: 1920 },
-      height: { ideal: 1080 }
-    }
-  };
-
-  const stream = await navigator.mediaDevices.getUserMedia(constraints);
-  state.stream = stream;
-  state.isStreaming = true;
-
-  const video = $("#camera");
-  video.srcObject = stream;
-
-  // iOS needs play() after a user gesture sometimes; try anyway
-  await video.play().catch(() => {});
-
-  const [track] = stream.getVideoTracks();
-  state.videoTrack = track;
-
-  // Capabilities: zoom/torch/focus
-  const caps = (track.getCapabilities && track.getCapabilities()) || {};
-  state.minZoom = caps.zoom?.min ?? 1;
-  state.maxZoom = caps.zoom?.max ?? 1;
-  state.zoom = clamp(state.zoom, state.minZoom, state.maxZoom);
-
-  state.focusSupported = !!caps.focusMode || !!caps.focusDistance;
-
-  const zoomSlider = $("#zoom");
-  if (zoomSlider) {
-    zoomSlider.min = String(state.minZoom);
-    zoomSlider.max = String(state.maxZoom);
-    zoomSlider.step = String(caps.zoom?.step ?? 0.1);
-    zoomSlider.value = String(state.zoom);
-    zoomSlider.disabled = !(caps.zoom);
-  }
-
-  // HUD hint
-  $("#hint")?.classList.add("fade");
-
-  // Apply zoom initial
-  if (caps.zoom) await applyTrackConstraints({ advanced: [{ zoom: state.zoom }] });
-
-  // Torch button availability
-  const torchSupported = !!caps.torch;
-  $("#btnTorch")?.toggleAttribute("disabled", !torchSupported);
-  $("#btnTorch")?.classList.toggle("disabled", !torchSupported);
-
-  // A little “boot” sound
-  softClick();
-}
-
-function stopCamera() {
-  if (state.stream) {
-    state.stream.getTracks().forEach(t => t.stop());
-  }
+function stopStream() {
+  if (!state.streaming) return;
+  camStop(els.cam);
+  state.streaming = false;
   state.stream = null;
-  state.videoTrack = null;
-  state.isStreaming = false;
-  state.torchOn = false;
-
-  const video = $("#camera");
-  if (video) video.srcObject = null;
+  state.detections = [];
+  clearOverlay();
+  setHudStatus("Camera stopped");
 }
 
-async function flipCamera() {
-  state.facingMode = state.facingMode === "environment" ? "user" : "environment";
-  if (state.isStreaming) {
-    await startCamera();
-    updateStatus(`Switched to ${state.facingMode}`);
-  }
+function clearOverlay() {
+  if (!els.overlay) return;
+  const ctx = els.overlay.getContext("2d");
+  ctx.clearRect(0, 0, els.overlay.width, els.overlay.height);
 }
 
-async function setZoom(z) {
-  state.zoom = z;
-  const track = state.videoTrack;
-  if (!track) return;
-  const caps = track.getCapabilities?.() || {};
-  if (!caps.zoom) return;
-  await applyTrackConstraints({ advanced: [{ zoom: state.zoom }] });
-  $("#zoomValue")?.textContent = `${state.zoom.toFixed(1)}×`;
-}
-
-async function toggleTorch() {
-  const track = state.videoTrack;
-  if (!track) return;
-  const caps = track.getCapabilities?.() || {};
-  if (!caps.torch) return;
-
-  state.torchOn = !state.torchOn;
-  await applyTrackConstraints({ advanced: [{ torch: state.torchOn }] });
-  updateStatus(state.torchOn ? "Torch ON" : "Torch OFF");
-  softClick();
-}
-
-async function applyTrackConstraints(constraints) {
-  try {
-    await state.videoTrack.applyConstraints(constraints);
-  } catch (e) {
-    console.warn("applyConstraints failed:", e);
-  }
-}
-
-/** Tap-to-inspect */
-let tapStart = null;
-
-function onViewportPointerDown(e) {
-  // Prevent scroll/zoom gestures interfering
-  e.preventDefault();
-
-  tapStart = { x: e.clientX, y: e.clientY, t: performance.now() };
-  const viewport = $("#viewport");
-  viewport.setPointerCapture(e.pointerId);
-
-  const move = (ev) => {
-    // If user drags, ignore (widgets handle their own drag)
-  };
-
-  const up = async (ev) => {
-    viewport.releasePointerCapture(ev.pointerId);
-    viewport.removeEventListener("pointermove", move);
-    viewport.removeEventListener("pointerup", up);
-
-    const dt = performance.now() - tapStart.t;
-    const dx = Math.abs(ev.clientX - tapStart.x);
-    const dy = Math.abs(ev.clientY - tapStart.y);
-
-    // Treat as tap
-    if (dt < 350 && dx < 12 && dy < 12) {
-      await inspectAt(ev.clientX, ev.clientY);
-    }
-  };
-
-  viewport.addEventListener("pointermove", move);
-  viewport.addEventListener("pointerup", up);
-}
-
-async function inspectAt(clientX, clientY) {
-  if (!state.isStreaming) {
-    updateStatus("Start camera first");
-    return;
-  }
-
-  const viewport = $("#viewport");
-  const rect = viewport.getBoundingClientRect();
-
-  const x = (clientX - rect.left) / rect.width;   // 0..1
-  const y = (clientY - rect.top) / rect.height;   // 0..1
-
-  // Visual ping reticle
-  spawnReticle(clientX - rect.left, clientY - rect.top);
-
-  // Grab current frame into canvas and crop around tap
-  const video = $("#camera");
-  const full = frameToCanvas(video);
-  if (!full) return;
-
-  // Crop box size based on zoom slider; higher zoom => smaller crop => more magnification
-  const cropSize = Math.round(full.width * clamp(0.25 / (state.zoom || 1), 0.08, 0.25));
-  const cx = Math.round(x * full.width);
-  const cy = Math.round(y * full.height);
-
-  const sx = clamp(cx - Math.floor(cropSize / 2), 0, full.width - cropSize);
-  const sy = clamp(cy - Math.floor(cropSize / 2), 0, full.height - cropSize);
-
-  const crop = document.createElement("canvas");
-  crop.width = 640;
-  crop.height = 640;
-  const ctx = crop.getContext("2d");
-
-  // Draw cropped region scaled up
-  ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(full, sx, sy, cropSize, cropSize, 0, 0, crop.width, crop.height);
-
-  // Show in viewer
-  showInspectViewer(crop.toDataURL("image/jpeg", 0.92));
-  softClick();
-  updateStatus("Inspect snapshot");
-}
-
-function snapshotCenterInspect() {
-  const viewport = $("#viewport");
-  const rect = viewport.getBoundingClientRect();
-  inspectAt(rect.left + rect.width / 2, rect.top + rect.height / 2);
-}
-
-function frameToCanvas(videoEl) {
-  if (!videoEl || videoEl.readyState < 2) return null;
-  const c = document.createElement("canvas");
-  // Use the actual video resolution when possible
-  c.width = videoEl.videoWidth || 1280;
-  c.height = videoEl.videoHeight || 720;
-  const ctx = c.getContext("2d");
-  ctx.drawImage(videoEl, 0, 0, c.width, c.height);
-  return c;
-}
-
-/** Viewer widget for inspect snapshots */
-function showInspectViewer(dataUrl) {
-  const viewer = $("#inspectViewer");
-  const img = $("#inspectImg");
-  if (!viewer || !img) return;
-
-  img.src = dataUrl;
-  viewer.classList.add("show");
-
-  $("#btnCloseInspect")?.addEventListener("click", () => {
-    viewer.classList.remove("show");
-    softClick();
-  }, { once: true });
-
-  $("#btnSaveInspect")?.addEventListener("click", () => {
-    // iOS Safari: trigger download via anchor (works best in standalone, may open new tab)
-    const a = document.createElement("a");
-    a.href = dataUrl;
-    a.download = `inspect_${Date.now()}.jpg`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    updateStatus("Saved image");
-    softClick();
-  }, { once: true });
-}
-
-/** HUD widgets */
-function addWidgetMenu() {
-  const panel = $("#widgetPicker");
-  if (!panel) return;
-  panel.classList.toggle("show");
-  softClick();
-}
-
-window.addEventListener("click", (e) => {
-  // Click outside picker closes it
-  const picker = $("#widgetPicker");
-  if (!picker) return;
-  if (!picker.classList.contains("show")) return;
-  if (picker.contains(e.target) || e.target?.id === "btnAddWidget") return;
-  picker.classList.remove("show");
-});
-
-window.addEventListener("DOMContentLoaded", () => {
-  // Widget picker buttons (if you included them in HTML)
-  document.querySelectorAll("[data-add-widget]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const type = btn.getAttribute("data-add-widget");
-      spawnWidget(type);
-      $("#widgetPicker")?.classList.remove("show");
-      softClick();
-    });
-  });
-});
-
-function spawnWidget(type) {
-  const hud = $("#hud");
-  if (!hud) return;
-
-  const w = document.createElement("div");
-  w.className = "widget glass";
-  w.setAttribute("data-widget", type);
-
-  const header = document.createElement("div");
-  header.className = "widgetHeader";
-  header.innerHTML = `
-    <div class="widgetTitle">${titleFor(type)}</div>
-    <button class="widgetClose" aria-label="Close">✕</button>
-  `;
-  w.appendChild(header);
-
-  const body = document.createElement("div");
-  body.className = "widgetBody";
-  body.appendChild(renderWidgetBody(type));
-  w.appendChild(body);
-
-  // default position
-  w.style.left = `${20 + Math.floor(Math.random() * 40)}px`;
-  w.style.top = `${120 + Math.floor(Math.random() * 80)}px`;
-  w.style.width = "260px";
-  w.style.height = "190px";
-
-  hud.appendChild(w);
-
-  // close
-  header.querySelector(".widgetClose")?.addEventListener("click", () => {
-    w.remove();
-    softClick();
-  });
-
-  // enable interactions
-  enableWidgetInteractions(w);
-
-  updateStatus(`Added ${titleFor(type)}`);
-}
-
-function titleFor(type) {
-  switch (type) {
-    case "photos": return "Photo Viewer";
-    case "notes": return "Quick Notes";
-    case "compass": return "Compass";
-    case "stats": return "Live Stats";
-    default: return "Widget";
-  }
-}
-
-function renderWidgetBody(type) {
-  const wrap = document.createElement("div");
-  wrap.className = "widgetInner";
-
-  if (type === "photos") {
-    wrap.innerHTML = `
-      <div class="row">
-        <button class="pill" id="btnPickPhoto">Import photo</button>
-        <button class="pill" id="btnClearPhoto">Clear</button>
-      </div>
-      <div class="photoFrame">
-        <img id="photoPreview" alt="Preview" />
-      </div>
-    `;
-    // Wire
-    queueMicrotask(() => {
-      const pick = $("#btnPickPhoto", wrap);
-      const clear = $("#btnClearPhoto", wrap);
-      const img = $("#photoPreview", wrap);
-
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = "image/*";
-
-      pick?.addEventListener("click", () => input.click());
-      input.addEventListener("change", () => {
-        const file = input.files?.[0];
-        if (!file) return;
-        const url = URL.createObjectURL(file);
-        img.src = url;
-        updateStatus("Photo loaded");
-        softClick();
-      });
-
-      clear?.addEventListener("click", () => {
-        img.src = "";
-        softClick();
-      });
-    });
-    return wrap;
-  }
-
-  if (type === "notes") {
-    wrap.innerHTML = `
-      <textarea class="notes" placeholder="Type quick notes..."></textarea>
-      <div class="row">
-        <button class="pill" id="btnSaveNote">Save</button>
-        <button class="pill" id="btnLoadNote">Load</button>
-        <button class="pill" id="btnClearNote">Clear</button>
-      </div>
-      <div class="tiny muted">Saved locally on this device.</div>
-    `;
-    queueMicrotask(() => {
-      const ta = $("textarea", wrap);
-      $("#btnSaveNote", wrap)?.addEventListener("click", () => {
-        localStorage.setItem("pvh_note", ta.value || "");
-        updateStatus("Note saved");
-        softClick();
-      });
-      $("#btnLoadNote", wrap)?.addEventListener("click", () => {
-        ta.value = localStorage.getItem("pvh_note") || "";
-        updateStatus("Note loaded");
-        softClick();
-      });
-      $("#btnClearNote", wrap)?.addEventListener("click", () => {
-        ta.value = "";
-        softClick();
-      });
-    });
-    return wrap;
-  }
-
-  if (type === "compass") {
-    wrap.innerHTML = `
-      <div class="compass">
-        <div class="compassRing" id="compassRing">
-          <div class="compassNeedle"></div>
-        </div>
-        <div class="row">
-          <div class="muted tiny">iOS may require motion permission.</div>
-        </div>
-      </div>
-    `;
-    // Basic compass using alpha orientation if available
-    queueMicrotask(() => {
-      const ring = $("#compassRing", wrap);
-      if (!ring) return;
-      setInterval(() => {
-        const a = state.orientation.alpha || 0;
-        ring.style.transform = `rotate(${-a}deg)`;
-      }, 60);
-    });
-    return wrap;
-  }
-
-  if (type === "stats") {
-    wrap.innerHTML = `
-      <div class="kpis">
-        <div class="kpi">
-          <div class="kpiLabel">Users</div>
-          <div class="kpiValue" id="kUsers">—</div>
-        </div>
-        <div class="kpi">
-          <div class="kpiLabel">Motion</div>
-          <div class="kpiValue" id="kMotion">—</div>
-        </div>
-        <div class="kpi">
-          <div class="kpiLabel">Zoom</div>
-          <div class="kpiValue" id="kZoom">—</div>
-        </div>
-      </div>
-    `;
-    queueMicrotask(() => {
-      const ku = $("#kUsers", wrap);
-      const km = $("#kMotion", wrap);
-      const kz = $("#kZoom", wrap);
-      setInterval(() => {
-        if (ku) ku.textContent = `${(9000 + Math.floor(Math.random() * 3000)).toLocaleString()}`;
-        if (km) km.textContent = state.orientationPermitted ? "ON" : "OFF";
-        if (kz) kz.textContent = `${(state.zoom || 1).toFixed(1)}×`;
-      }, 500);
-    });
-    return wrap;
-  }
-
-  wrap.textContent = "Widget body";
-  return wrap;
-}
-
-/** Widget drag + resize */
-function enableWidgetInteractions(rootEl) {
-  if (!rootEl) return;
-
-  rootEl.querySelectorAll(".widget").forEach(setupWidgetInteractions);
-  if (rootEl.classList?.contains("widget")) setupWidgetInteractions(rootEl);
-}
-
-function setupWidgetInteractions(widget) {
-  if (widget.__wired) return;
-  widget.__wired = true;
-
-  const header = widget.querySelector(".widgetHeader");
-  if (header) {
-    header.style.touchAction = "none";
-    header.addEventListener("pointerdown", (e) => dragStart(e, widget));
-  }
-
-  // Add resize handle if not present
-  if (!widget.querySelector(".resizeHandle")) {
-    const handle = document.createElement("div");
-    handle.className = "resizeHandle";
-    handle.title = "Resize";
-    handle.style.touchAction = "none";
-    handle.addEventListener("pointerdown", (e) => resizeStart(e, widget));
-    widget.appendChild(handle);
-  }
-}
-
-function dragStart(e, widget) {
-  e.preventDefault();
-  widget.setPointerCapture(e.pointerId);
-
-  const start = {
-    x: e.clientX,
-    y: e.clientY,
-    left: parseFloat(widget.style.left || "0"),
-    top: parseFloat(widget.style.top || "0"),
-  };
-
-  const move = (ev) => {
-    const dx = ev.clientX - start.x;
-    const dy = ev.clientY - start.y;
-    widget.style.left = `${start.left + dx}px`;
-    widget.style.top = `${start.top + dy}px`;
-  };
-
-  const up = (ev) => {
-    widget.releasePointerCapture(ev.pointerId);
-    widget.removeEventListener("pointermove", move);
-    widget.removeEventListener("pointerup", up);
-  };
-
-  widget.addEventListener("pointermove", move);
-  widget.addEventListener("pointerup", up);
-}
-
-function resizeStart(e, widget) {
-  e.preventDefault();
-  widget.setPointerCapture(e.pointerId);
-
-  const start = {
-    x: e.clientX,
-    y: e.clientY,
-    w: widget.getBoundingClientRect().width,
-    h: widget.getBoundingClientRect().height,
-  };
-
-  const move = (ev) => {
-    const dx = ev.clientX - start.x;
-    const dy = ev.clientY - start.y;
-    widget.style.width = `${clamp(start.w + dx, 180, 420)}px`;
-    widget.style.height = `${clamp(start.h + dy, 140, 520)}px`;
-  };
-
-  const up = (ev) => {
-    widget.releasePointerCapture(ev.pointerId);
-    widget.removeEventListener("pointermove", move);
-    widget.removeEventListener("pointerup", up);
-  };
-
-  widget.addEventListener("pointermove", move);
-  widget.addEventListener("pointerup", up);
-}
-
-/** Orientation / “spatial” parallax */
-async function tryEnableOrientation() {
-  // iOS requires explicit permission from user gesture sometimes.
-  // We try passive first; if blocked, show a button in UI if you have it.
-  const btn = $("#btnMotion");
-  if (btn) btn.addEventListener("click", requestOrientationPermission);
-
-  // try without prompt
-  attachOrientationListener();
-}
-
-async function requestOrientationPermission() {
+// ---------- Motion ----------
+async function enableMotion() {
+  // If iOS requires permission, request it inside a user gesture (we are in button click)
   try {
     if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
       const res = await DeviceMotionEvent.requestPermission();
-      state.orientationPermitted = (res === "granted");
-      if (state.orientationPermitted) {
-        attachOrientationListener(true);
-        updateStatus("Motion enabled");
-      } else {
-        updateStatus("Motion denied");
+      if (res !== "granted") {
+        state.motionOn = false;
+        return;
       }
-      softClick();
-      return;
     }
-
-    // Non-iOS or already allowed
-    state.orientationPermitted = true;
-    attachOrientationListener(true);
-    updateStatus("Motion enabled");
-    softClick();
+    window.addEventListener("deviceorientation", onDeviceOrientation, { passive: true });
+    state.motionOn = true;
   } catch (e) {
-    console.warn("Motion permission error:", e);
-    updateStatus("Motion not available");
+    console.warn("Motion permission failed:", e);
+    state.motionOn = false;
   }
 }
 
-function attachOrientationListener(force = false) {
-  if (!("DeviceOrientationEvent" in window)) return;
+function onDeviceOrientation(ev) {
+  // alpha can approximate heading on some devices; not guaranteed
+  state.alpha = ev.alpha ?? 0;
+  state.beta = ev.beta ?? 0;
 
-  // If iOS blocked it, values will remain null; user can press btnMotion to request permission.
-  window.addEventListener("deviceorientation", (ev) => {
-    const { alpha, beta, gamma } = ev;
-    if (alpha == null && beta == null && gamma == null) return;
-
-    state.orientation.alpha = alpha || 0;
-    state.orientation.beta = beta || 0;
-    state.orientation.gamma = gamma || 0;
-
-    // Apply subtle parallax to HUD (feels more “spatial”)
-    const hud = $("#hud");
-    if (hud) {
-      const tx = clamp((state.orientation.gamma / 45) * 10, -10, 10);
-      const ty = clamp((state.orientation.beta / 45) * 10, -10, 10);
-      hud.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
-    }
-
-    if (force) state.orientationPermitted = true;
-  }, { passive: true });
+  setHudHeading(Math.round(state.alpha));
+  setHudPitch(Math.round(state.beta));
 }
 
-/** Reticle ping */
-function spawnReticle(x, y) {
-  const overlay = $("#overlay");
-  if (!overlay) return;
+// ---------- AI ----------
+async function toggleAI() {
+  if (!state.streaming) {
+    setHudStatus("Start camera first");
+    return;
+  }
 
-  const r = document.createElement("div");
-  r.className = "reticle";
-  r.style.left = `${x}px`;
-  r.style.top = `${y}px`;
-  overlay.appendChild(r);
+  state.aiOn = !state.aiOn;
+  els.btnAI.textContent = state.aiOn ? "AI: On" : "AI: Off";
+  els.btnAI.classList.toggle("on", state.aiOn);
 
-  setTimeout(() => r.remove(), 650);
+  if (state.aiOn) {
+    setHudStatus("Loading AI…");
+    await loadVisionModel((t) => setHudStatus(t));
+    setHudStatus("AI Ready");
+    if (!state.aiLooping) aiLoop();
+  } else {
+    state.detections = [];
+    clearOverlay();
+    setHudStatus("AI Off");
+    setHudFps("--");
+  }
 }
 
-/** UI helpers */
-function updateStatus(text) {
-  const el = $("#status");
-  if (el) el.textContent = text;
+async function aiLoop() {
+  if (state.aiLooping) return;
+  state.aiLooping = true;
+
+  while (state.aiOn) {
+    if (!state.streaming || !isVisionReady()) break;
+
+    const t0 = performance.now();
+    const dets = await detectFrame(els.cam, 0.55);
+    const t1 = performance.now();
+
+    state.detections = dets;
+
+    // Update fps estimate
+    const dt = Math.max(1, t1 - t0);
+    const fps = 1000 / dt;
+    state.aiFps = Math.round(fps);
+    setHudFps(String(state.aiFps));
+
+    // Draw boxes
+    drawDetections(els.overlay, dets, els.cam);
+
+    // Throttle to keep iPhone smooth
+    await sleep(140);
+  }
+
+  state.aiLooping = false;
 }
 
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Tiny click sound (no external files) */
-function softClick() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = "sine";
-    o.frequency.value = 880;
-    g.gain.value = 0.03;
-    o.connect(g);
-    g.connect(ctx.destination);
-    o.start();
-    o.stop(ctx.currentTime + 0.03);
-    setTimeout(() => ctx.close(), 80);
-  } catch {}
+// ---------- Snap / Inspect ----------
+async function snapAt(where) {
+  if (!state.streaming) {
+    setHudStatus("Start camera first");
+    return;
+  }
+
+  // Capture full frame
+  const full = captureToCanvas(els.cam, document.createElement("canvas"));
+  const vw = full.width, vh = full.height;
+
+  // Choose point on screen
+  const rect = els.cam.getBoundingClientRect();
+  let sx = rect.left + rect.width / 2;
+  let sy = rect.top + rect.height / 2;
+
+  if (where && typeof where === "object") {
+    sx = where.x;
+    sy = where.y;
+  }
+
+  // Normalize screen point to video space
+  const nx = (sx - rect.left) / rect.width;
+  const ny = (sy - rect.top) / rect.height;
+  const cx = Math.round(nx * vw);
+  const cy = Math.round(ny * vh);
+
+  // If AI is on, prefer the nearest detection to tap point (looks “smart”)
+  let picked = null;
+  if (state.aiOn && state.detections?.length) {
+    const dpr = window.devicePixelRatio || 1;
+    // overlay canvas is in device pixels
+    const ox = (sx / window.innerWidth) * els.overlay.width;
+    const oy = (sy / window.innerHeight) * els.overlay.height;
+    picked = pickDetectionAt(ox, oy, state.detections, els.overlay, els.cam);
+  }
+
+  // Crop region
+  const crop = document.createElement("canvas");
+  crop.width = 900;
+  crop.height = 900;
+  const ctx = crop.getContext("2d");
+
+  let cropBox;
+
+  if (picked?.rect) {
+    // Use picked detection box mapped back to video via vision.js mapping
+    // We don't have direct video-space bbox here, so use a reasonable “inspect” crop around the center point.
+    cropBox = { size: Math.round(Math.min(vw, vh) * 0.22) };
+  } else {
+    cropBox = { size: Math.round(Math.min(vw, vh) * 0.22) };
+  }
+
+  const size = cropBox.size;
+  const x0 = clamp(cx - Math.floor(size / 2), 0, vw - size);
+  const y0 = clamp(cy - Math.floor(size / 2), 0, vh - size);
+
+  ctx.drawImage(full, x0, y0, size, size, 0, 0, crop.width, crop.height);
+
+  const dataUrl = crop.toDataURL("image/jpeg", 0.92);
+
+  // Save to IndexedDB
+  const meta = picked?.det ? { label: picked.det.class, score: picked.det.score } : null;
+  const saved = await saveSnap({ dataUrl, meta });
+
+  // Open inspect panel
+  openInspectPanel(saved);
+
+  setHudStatus(meta?.label ? `Snapped: ${meta.label}` : "Snapped");
+}
+
+// ---------- Panels ----------
+function openDashboardPanel() {
+  const html = `
+    <div class="kv"><small>Camera</small><div>${state.streaming ? "Live" : "Off"}</div></div>
+    <div class="kv"><small>AI</small><div>${state.aiOn ? "On" : "Off"}</div></div>
+    <div class="kv"><small>Motion</small><div>${state.motionOn ? "On" : "Off"}</div></div>
+
+    <div class="grid" style="margin-top:10px;">
+      <button class="dockBtn" id="pStart">${state.streaming ? "Restart" : "Start"}</button>
+      <button class="dockBtn" id="pStop">Stop</button>
+      <button class="dockBtn" id="pAI">${state.aiOn ? "AI Off" : "AI On"}</button>
+      <button class="dockBtn" id="pGallery">Gallery</button>
+    </div>
+
+    <div class="notice" style="margin-top:10px;">
+      iPhone Safari doesn’t expose true LiDAR world-mesh + anchored AR UI like Apple Vision.
+      This uses camera + on-device AI + motion overlays.
+    </div>
+  `;
+
+  const panel = createPanel({ title: "Dashboard", x: 16, y: 110, w: 360, h: 300, bodyHTML: html });
+  els.app.appendChild(panel);
+
+  const body = getPanelBody(panel);
+
+  $("#pStart", body)?.addEventListener("click", async () => {
+    if (!state.streaming) await startStream();
+    else { stopStream(); await startStream(); }
+    setHudStatus("Camera live");
+  });
+
+  $("#pStop", body)?.addEventListener("click", () => stopStream());
+  $("#pAI", body)?.addEventListener("click", () => toggleAI());
+  $("#pGallery", body)?.addEventListener("click", () => openGalleryPanel());
+}
+
+async function openGalleryPanel() {
+  const panel = createPanel({ title: "Gallery", x: 16, y: 430, w: 360, h: 360, bodyHTML: `<div class="notice">Loading…</div>` });
+  els.app.appendChild(panel);
+
+  const snaps = await listSnaps(60);
+
+  if (!snaps.length) {
+    setPanelBody(panel, `<div class="notice">No snapshots yet. Tap the camera or press Snap.</div>`);
+    return;
+  }
+
+  const thumbs = snaps.map(s => `
+    <div class="thumb" data-id="${s.id}">
+      <img src="${s.dataUrl}" alt="snap"/>
+    </div>
+  `).join("");
+
+  setPanelBody(panel, `
+    <div class="gallery">${thumbs}</div>
+    <div style="margin-top:10px" class="notice">Tap a shot to inspect. Long press not required.</div>
+  `);
+
+  const body = getPanelBody(panel);
+  body.querySelectorAll(".thumb").forEach(el => {
+    el.addEventListener("click", async () => {
+      const id = el.getAttribute("data-id");
+      const all = await listSnaps(60);
+      const snap = all.find(x => x.id === id);
+      if (snap) openInspectPanel(snap);
+    });
+  });
+}
+
+function openInspectPanel(snap) {
+  const label = snap.meta?.label ? `${snap.meta.label} (${Math.round((snap.meta.score || 0) * 100)}%)` : "Snapshot";
+  const panel = createPanel({
+    title: "Inspect",
+    x: 380,
+    y: 110,
+    w: 360,
+    h: 520,
+    bodyHTML: `
+      <div class="thumb" style="aspect-ratio: 1/1; margin-bottom:10px;">
+        <img src="${snap.dataUrl}" alt="inspect"/>
+      </div>
+      <div class="kv"><small>Detected</small><div>${label}</div></div>
+      <div class="grid" style="margin-top:10px;">
+        <a class="dockBtn" href="${snap.dataUrl}" download="snapshot.jpg" style="text-decoration:none; display:flex; align-items:center; justify-content:center;">Download</a>
+        <button class="dockBtn" id="del">Delete</button>
+      </div>
+      <div class="notice" style="margin-top:10px;">
+        If Download opens a new tab on iOS Safari, add to Home Screen for a smoother “app” feel.
+      </div>
+    `
+  });
+
+  els.app.appendChild(panel);
+
+  const body = getPanelBody(panel);
+  $("#del", body)?.addEventListener("click", async () => {
+    await deleteSnap(snap.id);
+    panel.remove();
+    setHudStatus("Deleted");
+  });
+}
+
+// ---------- utils ----------
+function clamp(v, a, b) {
+  return Math.max(a, Math.min(b, v));
 }
