@@ -1,99 +1,79 @@
+function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+
 export class HUD {
-  constructor(canvas, video) {
+  constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d", { alpha: true });
-    this.video = video;
 
-    this.lock = null; // {x,y} in canvas coords
-    this.detections = [];
     this.scanOn = false;
-    this.lastFps = 0;
+
+    // Raw detections for click logic
+    this.detections = [];
+
+    // Animated label states
+    // key -> {x,y,w,h,label,score,firstSeen,lastSeen}
+    this.labelStates = new Map();
 
     this._resize = this._resize.bind(this);
-    this._onTap = this._onTap.bind(this);
-
     window.addEventListener("resize", this._resize, { passive: true });
-    canvas.addEventListener("pointerdown", this._onTap, { passive: true });
-
     this._resize();
   }
 
   destroy() {
     window.removeEventListener("resize", this._resize);
-    this.canvas.removeEventListener("pointerdown", this._onTap);
   }
 
   setScanOn(on) { this.scanOn = on; }
-  setDetections(dets) { this.detections = dets || []; }
-  setFps(fps) { this.lastFps = fps; }
 
-  clearLock() { this.lock = null; }
+  setDetections(dets, now) {
+    this.detections = dets || [];
 
-  _onTap(e) {
-    const rect = this.canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (this.canvas.width / rect.width);
-    const y = (e.clientY - rect.top) * (this.canvas.height / rect.height);
-    this.lock = { x, y, t: performance.now() };
+    // Update label animation memory
+    const seenKeys = new Set();
+
+    for (const d of this.detections) {
+      const key = this._keyFor(d);
+      seenKeys.add(key);
+
+      const existing = this.labelStates.get(key);
+      if (existing) {
+        // Smooth position a bit to reduce jitter
+        existing.x = lerp(existing.x, d.x, 0.35);
+        existing.y = lerp(existing.y, d.y, 0.35);
+        existing.w = lerp(existing.w, d.width, 0.35);
+        existing.h = lerp(existing.h, d.height, 0.35);
+        existing.score = lerp(existing.score, d.score, 0.25);
+        existing.label = d.label;
+        existing.lastSeen = now;
+      } else {
+        this.labelStates.set(key, {
+          x: d.x, y: d.y, w: d.width, h: d.height,
+          label: d.label, score: d.score,
+          firstSeen: now,
+          lastSeen: now
+        });
+      }
+    }
+
+    // Let old labels fade out; don’t delete immediately
+    // (deleted during draw when fully faded).
   }
 
+  getDetections() { return this.detections; }
+
   _resize() {
-    // Match device pixels for crisp HUD
     const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
     const rect = this.canvas.getBoundingClientRect();
     this.canvas.width = Math.floor(rect.width * dpr);
     this.canvas.height = Math.floor(rect.height * dpr);
   }
 
-  draw(now) {
-    const ctx = this.ctx;
-    const w = this.canvas.width;
-    const h = this.canvas.height;
-
-    ctx.clearRect(0, 0, w, h);
-
-    // Subtle scanlines
-    ctx.globalAlpha = 0.12;
-    ctx.fillStyle = "rgba(0,255,220,1)";
-    const spacing = Math.max(10, Math.floor(h / 90));
-    for (let y = 0; y < h; y += spacing) ctx.fillRect(0, y, w, 1);
-    ctx.globalAlpha = 1;
-
-    // Corner brackets
-    this._cornerBrackets(ctx, w, h);
-
-    // Center reticle
-    this._reticle(ctx, w * 0.5, h * 0.5, Math.min(w, h) * 0.06);
-
-    // Lock point
-    if (this.lock) {
-      const pulse = 0.5 + 0.5 * Math.sin((now - this.lock.t) / 120);
-      this._reticle(ctx, this.lock.x, this.lock.y, 26 + pulse * 10);
-      ctx.globalAlpha = 0.85;
-      ctx.font = `${Math.floor(h * 0.018)}px ui-monospace, Menlo, monospace`;
-      ctx.fillStyle = "rgba(0,255,220,0.95)";
-      ctx.fillText("LOCK", this.lock.x + 18, this.lock.y - 14);
-      ctx.globalAlpha = 1;
-    }
-
-    // Detections
-    if (this.scanOn && this.detections?.length) {
-      for (const d of this.detections) this._drawDetection(ctx, d);
-    }
-
-    // Telemetry
-    ctx.globalAlpha = 0.75;
-    ctx.font = `${Math.floor(h * 0.016)}px ui-monospace, Menlo, monospace`;
-    ctx.fillStyle = "rgba(0,255,220,0.9)";
-    ctx.fillText(`SCAN: ${this.scanOn ? "ON" : "OFF"}`, 16, h - 42);
-    ctx.fillText(`FPS: ${this.lastFps.toFixed(1)}`, 16, h - 18);
-    ctx.globalAlpha = 1;
-  }
-
   _cornerBrackets(ctx, w, h) {
     const m = 18;
-    const len = Math.min(w, h) * 0.08;
+    const len = Math.min(w, h) * 0.075;
 
-    ctx.strokeStyle = "rgba(0,255,220,0.55)";
+    ctx.strokeStyle = "rgba(0,255,220,0.35)";
     ctx.lineWidth = 2;
 
     const corners = [
@@ -113,46 +93,122 @@ export class HUD {
     }
   }
 
-  _reticle(ctx, x, y, r) {
-    ctx.strokeStyle = "rgba(0,255,220,0.85)";
-    ctx.lineWidth = 2;
+  draw(now, fps) {
+    const ctx = this.ctx;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
 
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.stroke();
+    ctx.clearRect(0, 0, w, h);
 
-    ctx.beginPath();
-    ctx.moveTo(x - r - 10, y);
-    ctx.lineTo(x - r + 6, y);
-    ctx.moveTo(x + r - 6, y);
-    ctx.lineTo(x + r + 10, y);
-    ctx.moveTo(x, y - r - 10);
-    ctx.lineTo(x, y - r + 6);
-    ctx.moveTo(x, y + r - 6);
-    ctx.lineTo(x, y + r + 10);
-    ctx.stroke();
+    // Very subtle frame brackets (immersive but not noisy)
+    this._cornerBrackets(ctx, w, h);
+
+    // Telemetry (tiny, clean)
+    ctx.globalAlpha = 0.55;
+    ctx.font = `${Math.floor(h * 0.015)}px ui-monospace, Menlo, monospace`;
+    ctx.fillStyle = "rgba(0,255,220,0.85)";
+    ctx.fillText(`SCAN ${this.scanOn ? "ON" : "OFF"}`, 16, h - 18);
+    if (typeof fps === "number") ctx.fillText(`${fps.toFixed(0)} FPS`, 120, h - 18);
+    ctx.globalAlpha = 1;
+
+    if (!this.scanOn) {
+      // Don’t draw boxes when scan is off
+      return;
+    }
+
+    // Draw animated detections
+    for (const [key, s] of this.labelStates.entries()) {
+      const age = now - s.firstSeen;
+      const sinceSeen = now - s.lastSeen;
+
+      // Animation curve:
+      // - fade in quickly
+      // - hold while being seen
+      // - fade out after not seen for a bit
+      const fadeIn = clamp01(age / 160);
+      const fadeOut = clamp01((sinceSeen - 250) / 240); // start fading after 250ms unseen
+      const a = clamp01(fadeIn * (1 - fadeOut));
+
+      if (a <= 0.02 && sinceSeen > 700) {
+        this.labelStates.delete(key);
+        continue;
+      }
+
+      // Small “pop” scale on appear
+      const pop = 1 + 0.06 * (1 - clamp01(age / 220));
+
+      this._drawDetection(ctx, s, a, pop);
+    }
   }
 
-  _drawDetection(ctx, d) {
-    const { x, y, width, height, label, score } = d;
+  _drawDetection(ctx, s, alpha, scale) {
+    const x = s.x, y = s.y, w = s.w, h = s.h;
 
-    // Box
-    ctx.strokeStyle = "rgba(0,255,220,0.85)";
+    // Box (thin, crisp)
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = "rgba(0,255,220,0.75)";
     ctx.lineWidth = 2;
-    ctx.strokeRect(x, y, width, height);
+    ctx.strokeRect(x, y, w, h);
 
     // Label plate
-    const text = `${label} ${(score * 100).toFixed(0)}%`;
-    ctx.font = `14px ui-monospace, Menlo, monospace`;
+    const label = (s.label || "object").toUpperCase();
+    const score = Math.round((s.score || 0) * 100);
+    const text = `${label}  ${score}%`;
 
-    const pad = 6;
+    ctx.font = `800 14px ui-sans-serif, system-ui, -apple-system`;
+    const padX = 10;
+    const padY = 7;
     const tw = ctx.measureText(text).width;
-    const plateH = 22;
+    const plateW = tw + padX * 2;
+    const plateH = 28;
 
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
-    ctx.fillRect(x, Math.max(0, y - plateH), tw + pad * 2, plateH);
+    const px = x;
+    const py = Math.max(0, y - plateH - 6);
 
-    ctx.fillStyle = "rgba(0,255,220,0.95)";
-    ctx.fillText(text, x + pad, Math.max(16, y - 7));
+    // Animate plate scale from center
+    const cx = px + plateW / 2;
+    const cy = py + plateH / 2;
+
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    ctx.translate(-cx, -cy);
+
+    // Glass plate
+    ctx.fillStyle = "rgba(0,0,0,0.52)";
+    ctx.strokeStyle = "rgba(0,255,220,0.22)";
+    ctx.lineWidth = 1;
+
+    this._roundRect(ctx, px, py, plateW, plateH, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    // Accent notch
+    ctx.fillStyle = "rgba(0,255,220,0.55)";
+    ctx.fillRect(px, py + plateH - 2, Math.min(plateW, 78), 2);
+
+    // Text
+    ctx.fillStyle = "rgba(240,255,255,0.95)";
+    ctx.fillText(text, px + padX, py + 19);
+
+    ctx.restore();
+  }
+
+  _roundRect(ctx, x, y, w, h, r) {
+    const rr = Math.min(r, w * 0.5, h * 0.5);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+  }
+
+  _keyFor(d) {
+    // Stable-ish key (label + quantized center)
+    const cx = Math.round((d.x + d.width / 2) / 28);
+    const cy = Math.round((d.y + d.height / 2) / 28);
+    return `${d.label}|${cx}|${cy}`;
   }
 }
