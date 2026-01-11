@@ -2,34 +2,29 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
-  />
-  <meta name="theme-color" content="#0b0f14" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#070a0f" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="stylesheet" href="./css/styles.css" />
 
-  <title>Spatial HUD</title>
+  <title>Pocket Vision HUD</title>
 </head>
 <body>
   <div id="app">
-    <!-- Camera layer -->
     <video id="cam" autoplay playsinline muted></video>
     <canvas id="overlay"></canvas>
 
-    <!-- Top HUD -->
     <div id="topHUD" class="hud">
       <div class="chip" id="hudStatus">Idle</div>
       <div class="chip" id="hudFps">AI: -- fps</div>
       <div class="chip" id="hudHeading">Heading: --°</div>
       <div class="chip" id="hudPitch">Pitch: --°</div>
+      <div class="chip" id="hudGestures">Gestures: Off</div>
     </div>
 
-    <!-- Bottom quick actions -->
     <div id="dock" class="dock">
       <button class="dockBtn" id="btnStart">Start</button>
       <button class="dockBtn" id="btnAI">AI: Off</button>
@@ -38,24 +33,29 @@
       <button class="dockBtn" id="btnPanels">Panels</button>
     </div>
 
-    <!-- Permission / onboarding sheet -->
     <div id="sheet" class="sheet hidden">
       <div class="sheetCard">
-        <div class="sheetTitle">Enable Spatial HUD</div>
+        <div class="sheetTitle">Enable Pocket Vision HUD</div>
         <div class="sheetText">
-          This runs fully in Safari using your camera + sensors. iOS will ask for permissions.
-          <br/><br/>
-          Tip: For best results, use good light and keep the phone steady.
+          This runs in Safari using your camera + optional motion + optional hand gestures.
+          iOS will ask for permissions.
+          <br /><br />
+          Tips:
+          <ul style="margin:8px 0 0 18px; padding:0; color:rgba(255,255,255,0.7);">
+            <li>Use good light</li>
+            <li>Hold steady for better AI + gesture tracking</li>
+            <li>Hand gestures work best with your hand fully visible</li>
+          </ul>
         </div>
 
         <div class="sheetActions">
-          <button id="btnPerms" class="primary">Grant Permissions</button>
+          <button id="btnPerms" class="primary">Grant & Start</button>
           <button id="btnCloseSheet" class="ghost">Not now</button>
         </div>
 
         <div class="sheetFoot">
-          LiDAR / true world-mapping isn’t exposed to normal web pages on iPhone Safari —
-          this uses camera + on-device AI + motion to feel spatial.
+          Note: iPhone Safari does not expose full LiDAR world mesh + anchored AR UI like Apple Vision.
+          This uses camera + on-device ML + motion/gestures to feel “spatial”.
         </div>
       </div>
     </div>
