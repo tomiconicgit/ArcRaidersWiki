@@ -1,92 +1,87 @@
-// MediaPipe Hands gesture tracker
-// Emits: pinchStart, pinchMove, pinchEnd, point, none
+// gestures.js (Tasks Vision - HandLandmarker)
+// Emits a simple hand state for your app to interpret:
+// { ok, xN, yN, pinching, pinch01 }
+//
+// Why this works on iPhone Safari:
+// - No camera_utils conflict (you already own the camera stream)
+// - Tasks Vision is designed for VIDEO mode and ESM imports  [oai_citation:2‡codepen.io](https://codepen.io/mediapipe-preview/pen/zYamdVd)
 
-export async function createGestureTracker(videoEl, onGesture) {
-  const { Hands } = await import("https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js");
-  const { Camera } = await import("https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js");
+const TASKS_VER = "0.10.3";
+const TASKS_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${TASKS_VER}`;
+const WASM_PATH = `${TASKS_URL}/wasm`;
 
-  const hands = new Hands({
-    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-  });
+// Official model bundle location (Google AI Edge docs)  [oai_citation:3‡Google AI for Developers](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker)
+const MODEL_URL =
+  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task";
 
-  hands.setOptions({
-    maxNumHands: 1,
-    modelComplexity: 0,           // lighter for iPhone
-    minDetectionConfidence: 0.6,
-    minTrackingConfidence: 0.6
-  });
+let landmarker = null;
 
-  let pinchDown = false;
-  let lastEmit = 0;
+export async function initHandGestures(setStatus = () => {}) {
+  if (landmarker) return landmarker;
 
-  hands.onResults((res) => {
-    const now = performance.now();
-    // Limit processing spam a bit
-    if (now - lastEmit < 40) return; // ~25fps max
-    lastEmit = now;
+  setStatus("Gestures: loading…");
 
-    const lm = res.multiHandLandmarks?.[0];
-    if (!lm) {
-      if (pinchDown) {
-        pinchDown = false;
-        onGesture({ type: "pinchEnd" });
-      } else {
-        onGesture({ type: "none" });
-      }
-      return;
-    }
+  const mp = await import(TASKS_URL);
+  const { FilesetResolver, HandLandmarker } = mp;
 
-    const thumbTip = lm[4];
-    const indexTip = lm[8];
-    const indexPip = lm[6];
+  const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
 
-    const dx = thumbTip.x - indexTip.x;
-    const dy = thumbTip.y - indexTip.y;
-    const d = Math.sqrt(dx * dx + dy * dy);
-
-    const isPinch = d < 0.055;
-
-    // Point: index extended and NOT pinching
-    const isPoint = (indexTip.y < indexPip.y - 0.02) && !isPinch;
-
-    if (isPinch && !pinchDown) {
-      pinchDown = true;
-      onGesture({ type: "pinchStart", x: indexTip.x, y: indexTip.y });
-      return;
-    }
-
-    if (isPinch && pinchDown) {
-      onGesture({ type: "pinchMove", x: indexTip.x, y: indexTip.y });
-      return;
-    }
-
-    if (!isPinch && pinchDown) {
-      pinchDown = false;
-      onGesture({ type: "pinchEnd" });
-      return;
-    }
-
-    if (isPoint) {
-      onGesture({ type: "point", x: indexTip.x, y: indexTip.y });
-      return;
-    }
-
-    onGesture({ type: "none" });
-  });
-
-  const cam = new Camera(videoEl, {
-    onFrame: async () => {
-      await hands.send({ image: videoEl });
+  landmarker = await HandLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: MODEL_URL,
+      delegate: "GPU",
     },
-    width: 640,
-    height: 480
+    runningMode: "VIDEO",
+    numHands: 1,
+    minHandDetectionConfidence: 0.6,
+    minHandPresenceConfidence: 0.6,
+    minTrackingConfidence: 0.6,
   });
 
-  cam.start();
+  setStatus("Gestures: ready");
+  return landmarker;
+}
+
+export function gesturesReady() {
+  return !!landmarker;
+}
+
+export function estimateHand(videoEl, nowMs) {
+  if (!landmarker) return { ok: false };
+
+  const res = landmarker.detectForVideo(videoEl, nowMs);
+  const lm = res?.landmarks?.[0];
+  if (!lm || lm.length < 10) return { ok: false };
+
+  const thumbTip = lm[4];
+  const indexTip = lm[8];
+  const wrist = lm[0];
+  const midMcp = lm[9];
+
+  // Normalize pinch distance to hand size so it works across near/far hands
+  const handSize = dist(wrist, midMcp) || 0.25;
+  const pinchDist = dist(thumbTip, indexTip);
+  const pinchNorm = pinchDist / handSize;
+
+  // Tune thresholds for phone cam
+  const pinching = pinchNorm < 0.45;
+
+  // 1 = strong pinch, 0 = open
+  const pinch01 = clamp(1 - (pinchNorm - 0.25) / 0.35, 0, 1);
 
   return {
-    stop() {
-      cam.stop();
-    }
+    ok: true,
+    xN: indexTip.x,
+    yN: indexTip.y,
+    pinching,
+    pinch01
   };
 }
+
+function dist(a, b) {
+  const dx = (a.x - b.x);
+  const dy = (a.y - b.y);
+  return Math.hypot(dx, dy);
+}
+
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
