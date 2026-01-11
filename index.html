@@ -3,12 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>iGlass OS v1.0</title>
+    <title>iGlass OS v1.1 - Fixed</title>
     
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
 
     <style>
-        /* --- 1. THE OS AESTHETIC (Glassmorphism) --- */
         :root {
             --glass-bg: rgba(20, 20, 25, 0.4);
             --glass-border: rgba(255, 255, 255, 0.2);
@@ -20,7 +19,7 @@
             margin: 0;
             overflow: hidden;
             font-family: 'Courier New', Courier, monospace;
-            background-color: #000; /* Fallback */
+            background-color: #000;
         }
 
         /* The Camera Feed Background */
@@ -34,18 +33,14 @@
             z-index: -2;
         }
 
-        /* The 3D Layer (Transparent) */
-        #ar-scene {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-            pointer-events: none; /* Let touches pass through to HUD */
+        /* --- FIX: Force Permission Modal to Top --- */
+        /* This ensures the 'Allow' button is clickable above the HUD */
+        .a-dialog-container, .a-modal, .a-dialog {
+            z-index: 99999 !important;
+            pointer-events: auto !important;
         }
 
-        /* --- 2. THE HUD (Heads Up Display) --- */
+        /* --- THE HUD LAYER --- */
         .hud-layer {
             position: fixed;
             top: 0;
@@ -53,12 +48,11 @@
             width: 100%;
             height: 100%;
             z-index: 10;
-            pointer-events: none; /* Allow clicks only on buttons */
+            pointer-events: none; /* Crucial: clicks pass through to 3D/Popups */
             box-sizing: border-box;
             padding: 20px;
         }
 
-        /* Top Bar */
         .top-bar {
             display: flex;
             justify-content: space-between;
@@ -68,7 +62,6 @@
             font-size: 14px;
         }
 
-        /* The Reticle (Your "Gaze" Cursor) */
         .reticle {
             position: absolute;
             top: 50%;
@@ -79,50 +72,35 @@
             border-radius: 50%;
             transform: translate(-50%, -50%);
             box-shadow: 0 0 15px rgba(0, 243, 255, 0.3);
-            transition: all 0.2s ease;
-        }
-        .reticle.active {
-            border-color: var(--neon-alert);
-            transform: translate(-50%, -50%) scale(0.8);
         }
 
-        /* Bottom Controls */
         .controls {
             position: absolute;
-            bottom: 30px;
+            bottom: 40px;
             left: 50%;
             transform: translateX(-50%);
             display: flex;
             gap: 15px;
-            pointer-events: auto; /* Re-enable clicks here */
+            pointer-events: auto; /* Re-enables clicks for buttons only */
         }
 
         .btn {
             background: var(--glass-bg);
             border: 1px solid var(--glass-border);
             color: white;
-            padding: 12px 24px;
+            padding: 15px 25px;
             border-radius: 30px;
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             font-family: inherit;
             text-transform: uppercase;
             letter-spacing: 2px;
+            font-size: 12px;
             cursor: pointer;
-            transition: 0.3s;
         }
 
-        .btn:active {
-            background: var(--neon-blue);
-            color: black;
-        }
+        #file-input { display: none; }
 
-        /* Hidden File Input */
-        #file-input {
-            display: none;
-        }
-
-        /* Loading Overlay */
         #loading {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -131,7 +109,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            z-index: 999;
+            z-index: 10000;
             flex-direction: column;
         }
     </style>
@@ -140,158 +118,90 @@
 
     <div id="loading">
         <p>INITIALIZING OPTICS...</p>
-        <small>Please Allow Camera Access</small>
+        <small>Please Allow Camera & Sensors</small>
     </div>
 
     <video id="camera-feed" autoplay playsinline muted></video>
 
     <div class="hud-layer">
         <div class="top-bar">
-            <span id="clock">00:00</span>
-            <span>SYS: NORMAL</span>
-            <span>BAT: 98%</span>
+            <span id="clock">00:00:00</span>
+            <span>OS: iGLASS v1.1</span>
+            <span>BAT: 97%</span>
         </div>
         
         <div class="reticle" id="reticle"></div>
 
         <div class="controls">
             <button class="btn" onclick="document.getElementById('file-input').click()">
-                📂 Load Data
+                📂 VIEW MEDIA
             </button>
-            <button class="btn" onclick="resetFloatingContent()">
-                ⟳ Reset
+            <button class="btn" onclick="window.location.reload()">
+                ⟳ REBOOT
             </button>
         </div>
     </div>
 
     <input type="file" id="file-input" accept="image/*" onchange="handleFileUpload(this)">
 
-    <a-scene embedded vr-mode-ui="enabled: false" id="ar-scene" renderer="alpha: true">
+    <a-scene embedded vr-mode-ui="enabled: false" renderer="alpha: true; antialias: true;">
         
-        <a-light type="ambient" intensity="1"></a-light>
-        <a-light type="directional" position="-1 2 1"></a-light>
+        <a-light type="ambient" intensity="0.8"></a-light>
+        
+        <a-entity camera look-controls="magicWindowTrackingEnabled: true; touchEnabled: false"></a-entity>
 
-        <a-entity camera look-controls="touchEnabled: false; mouseEnabled: false">
-            </a-entity>
-
-        <a-entity id="content-anchor" position="0 0 -3">
-            
+        <a-entity id="content-anchor" position="0 1.5 -3">
             <a-plane id="display-plane" 
-                     position="0 0 0" 
-                     width="2" height="1.5" 
-                     color="#000" 
-                     material="opacity: 0.6; transparent: true; side: double"
-                     border="color: #00f3ff">
+                     width="3" height="2" 
+                     material="color: #000; opacity: 0.5; transparent: true; side: double">
                 
-                <a-text value="WAITING FOR DATA INPUT..." 
-                        align="center" 
-                        color="#00f3ff"
-                        width="4">
-                </a-text>
+                <a-text id="status-text" value="LINKING TO SENSORS..." align="center" color="#00f3ff" width="4"></a-text>
 
-                <a-box position="0 0.8 0" width="2.1" height="0.05" depth="0.05" color="#00f3ff"></a-box>
-                <a-box position="0 -0.8 0" width="2.1" height="0.05" depth="0.05" color="#00f3ff"></a-box>
+                <a-box position="0 1.05 0" width="3.1" height="0.05" depth="0.05" color="#00f3ff"></a-box>
+                <a-box position="0 -1.05 0" width="3.1" height="0.05" depth="0.05" color="#00f3ff"></a-box>
             </a-plane>
-
         </a-entity>
 
     </a-scene>
 
     <script>
-        // --- 1. Camera Setup (The "Eyes") ---
-        async function startCamera() {
+        // Start Camera Stream
+        async function initCamera() {
             const video = document.getElementById('camera-feed');
-            const loading = document.getElementById('loading');
-
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: 'environment', // Use back camera
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    } 
+                    video: { facingMode: 'environment' } 
                 });
                 video.srcObject = stream;
-                loading.style.display = 'none';
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('status-text').setAttribute('value', 'SYSTEM READY\nLOAD MEDIA TO BEGIN');
             } catch (err) {
-                loading.innerHTML = "<p>CAMERA ACCESS DENIED</p><small>Check Settings > Safari</small>";
-                console.error("Camera Error:", err);
+                console.error(err);
+                document.getElementById('loading').innerHTML = "CAMERA ERROR: CHECK PERMISSIONS";
             }
         }
 
-        // --- 2. Clock & HUD Logic ---
-        function updateHUD() {
-            const now = new Date();
-            document.getElementById('clock').innerText = 
-                now.toLocaleTimeString('en-US', { hour12: false });
-        }
-        setInterval(updateHUD, 1000);
+        // Clock logic
+        setInterval(() => {
+            document.getElementById('clock').innerText = new Date().toLocaleTimeString();
+        }, 1000);
 
-        // --- 3. Interaction: File Upload (The "Safari" Viewer) ---
+        // Photo Upload Logic
         function handleFileUpload(input) {
             const file = input.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const imgUrl = e.target.result;
-                update3DDisplay(imgUrl);
-            };
-            reader.readAsDataURL(file);
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const plane = document.getElementById('display-plane');
+                    plane.setAttribute('src', e.target.result);
+                    plane.setAttribute('material', 'opacity: 1; color: #fff');
+                    document.getElementById('status-text').setAttribute('visible', 'false');
+                };
+                reader.readAsDataURL(file);
+            }
         }
 
-        function update3DDisplay(url) {
-            const plane = document.getElementById('display-plane');
-            
-            // Remove old text
-            plane.innerHTML = ''; 
-
-            // Update Texture
-            plane.setAttribute('src', url);
-            plane.setAttribute('material', 'color: #fff; opacity: 1');
-            
-            // Add a simple animation to show it "loaded"
-            plane.setAttribute('animation', 'property: scale; from: 0 0 0; to: 1 1 1; dur: 500; easing: easeOutElastic');
-            
-            // Re-add borders (visual flair)
-            const topBorder = document.createElement('a-box');
-            topBorder.setAttribute('position', '0 0.8 0');
-            topBorder.setAttribute('width', '2.1');
-            topBorder.setAttribute('height', '0.05');
-            topBorder.setAttribute('depth', '0.05');
-            topBorder.setAttribute('color', '#00f3ff');
-            plane.appendChild(topBorder);
-
-            const btmBorder = document.createElement('a-box');
-            btmBorder.setAttribute('position', '0 -0.8 0');
-            btmBorder.setAttribute('width', '2.1');
-            btmBorder.setAttribute('height', '0.05');
-            btmBorder.setAttribute('depth', '0.05');
-            btmBorder.setAttribute('color', '#00f3ff');
-            plane.appendChild(btmBorder);
-        }
-
-        function resetFloatingContent() {
-            const anchor = document.getElementById('content-anchor');
-            // Reset position to "in front of user"
-            anchor.setAttribute('rotation', '0 0 0');
-            // In a full AR app, we'd recalculate camera forward vector
-            // Here we just reload the page for a clean slate
-            window.location.reload();
-        }
-
-        // --- 4. Simulated "Gesture" Interaction ---
-        // On mobile, "touch" is the most reliable "gesture"
-        document.addEventListener('touchstart', () => {
-            document.getElementById('reticle').classList.add('active');
-        });
-        document.addEventListener('touchend', () => {
-            document.getElementById('reticle').classList.remove('active');
-        });
-
-        // Initialize
-        window.addEventListener('load', startCamera);
-
+        window.addEventListener('load', initCamera);
     </script>
 </body>
 </html>
