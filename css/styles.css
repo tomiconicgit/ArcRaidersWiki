@@ -14,6 +14,7 @@
 html,body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-family: -apple-system, system-ui, Segoe UI, Roboto, Arial; }
 #app{ position:fixed; inset:0; overflow:hidden; background:var(--bg); }
 
+/* Camera */
 #cam{
   position:absolute; inset:0;
   width:100%; height:100%;
@@ -22,19 +23,21 @@ html,body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-
   transform: translateZ(0);
 }
 
+/* Overlay canvas for boxes */
 #overlay{
   position:absolute; inset:0;
   width:100%; height:100%;
   pointer-events:none;
 }
 
+/* Top HUD chips */
 .hud{
   position:absolute;
   top: calc(env(safe-area-inset-top) + 10px);
   left: 10px;
   right: 10px;
   display:flex;
-  gap:8px;
+  gap:6px;
   flex-wrap:wrap;
   z-index: 5;
 }
@@ -44,21 +47,23 @@ html,body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-
   border: 1px solid var(--stroke);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  padding: 8px 10px;
+  padding: 7px 10px;
   border-radius: 999px;
   font-size: 12px;
   color: var(--text);
 }
 
+/* Bottom dock - portrait contained */
 .dock{
   position:absolute;
   left: 12px;
   right: 12px;
   bottom: calc(env(safe-area-inset-bottom) + 12px);
-  display:flex;
-  gap:10px;
-  justify-content: space-between;
   z-index: 6;
+
+  display:grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
 
   background: rgba(10, 14, 20, 0.25);
   border: 1px solid rgba(255,255,255,0.08);
@@ -68,20 +73,24 @@ html,body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-
   padding: 10px;
 }
 
+@media (max-width: 390px){
+  .dock{ grid-template-columns: repeat(3, 1fr); }
+}
+
 .dockBtn{
-  flex:1;
   border: 1px solid rgba(255,255,255,0.10);
   background: rgba(18,24,33,0.35);
   color: var(--text);
   border-radius: 14px;
-  padding: 10px 10px;
-  font-weight: 650;
-  font-size: 13px;
+  padding: 10px 8px;
+  font-weight: 750;
+  font-size: 12px;
 }
 
 .dockBtn:active{ transform: scale(0.98); }
 .dockBtn.on{ border-color: rgba(68,255,175,0.35); }
 
+/* Permission sheet */
 .sheet{
   position:absolute; inset:0;
   background: rgba(0,0,0,0.55);
@@ -90,7 +99,6 @@ html,body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-
   justify-content:center;
   z-index: 20;
 }
-
 .sheet.hidden{ display:none; }
 
 .sheetCard{
@@ -102,8 +110,7 @@ html,body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
 }
-
-.sheetTitle{ font-size: 18px; font-weight: 800; margin-bottom: 8px; }
+.sheetTitle{ font-size: 18px; font-weight: 900; margin-bottom: 8px; }
 .sheetText{ font-size: 13px; color: var(--muted); line-height: 1.35; }
 .sheetActions{ display:flex; gap:10px; margin-top: 14px; }
 .primary{
@@ -113,7 +120,7 @@ html,body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-
   color: var(--text);
   padding: 12px;
   border-radius: 14px;
-  font-weight: 800;
+  font-weight: 900;
 }
 .ghost{
   flex:1;
@@ -122,15 +129,15 @@ html,body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-
   color: var(--text);
   padding: 12px;
   border-radius: 14px;
-  font-weight: 800;
+  font-weight: 900;
 }
 .sheetFoot{ margin-top: 12px; font-size: 12px; color: rgba(255,255,255,0.55); }
 
-/* Floating panels */
+/* Panels (floating, but contained on portrait) */
 .panel{
   position:absolute;
-  width: min(360px, 86vw);
-  height: min(260px, 40vh);
+  width: min(360px, 92vw);
+  height: min(420px, 52vh);
   border-radius: 18px;
   background: var(--glass2);
   border: 1px solid rgba(255,255,255,0.10);
@@ -139,17 +146,17 @@ html,body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-
   -webkit-backdrop-filter: blur(16px);
   overflow:hidden;
   z-index: 10;
-  touch-action: none;
 }
 
 .panelHeader{
-  height: 44px;
+  height: 46px;
   display:flex;
   align-items:center;
   justify-content: space-between;
   padding: 0 10px 0 12px;
   background: rgba(12, 16, 22, 0.35);
   border-bottom: 1px solid rgba(255,255,255,0.10);
+  touch-action: none; /* we drag header */
 }
 
 .panelTitle{
@@ -169,9 +176,25 @@ html,body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-
 }
 
 .panelBody{
-  height: calc(100% - 44px);
+  height: calc(100% - 46px);
   padding: 10px;
   overflow:auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Resize hint corner */
+.panel::after{
+  content:"";
+  position:absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 18px;
+  height: 18px;
+  border-right: 2px solid rgba(255,255,255,0.22);
+  border-bottom: 2px solid rgba(255,255,255,0.22);
+  border-radius: 0 0 6px 0;
+  pointer-events:none;
+  opacity: 0.6;
 }
 
 .kv{
@@ -185,21 +208,13 @@ html,body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-
   margin-bottom: 8px;
   font-size: 13px;
 }
-.kv small{ color: var(--muted); font-weight: 650; }
+.kv small{ color: var(--muted); font-weight: 700; }
 
 .grid{
   display:grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
 }
-.tile{
-  border-radius: 14px;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(8, 12, 18, 0.22);
-  padding: 10px;
-}
-.tileTitle{ font-weight: 900; font-size: 12px; margin-bottom: 4px; color: rgba(255,255,255,0.78); }
-.tileValue{ font-weight: 950; font-size: 18px; }
 
 .gallery{
   display:grid;
