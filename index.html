@@ -23,32 +23,30 @@
       <div class="chip" id="hudHeading">Heading: --°</div>
       <div class="chip" id="hudPitch">Pitch: --°</div>
       <div class="chip" id="hudGestures">Gestures: Off</div>
-      <div class="chip" id="hudZoom">Zoom: --</div>
+      <div class="chip" id="hudSelect">Selected: —</div>
     </div>
 
-    <div id="dock" class="dock" aria-label="Quick actions">
+    <div id="dock" class="dock">
       <button class="dockBtn" id="btnStart">Start</button>
-      <button class="dockBtn" id="btnAI">AI</button>
+      <button class="dockBtn" id="btnAI">AI: Off</button>
+      <button class="dockBtn" id="btnGestures">Gestures</button>
       <button class="dockBtn" id="btnSnap">Snap</button>
       <button class="dockBtn" id="btnGallery">Gallery</button>
       <button class="dockBtn" id="btnPanels">Panels</button>
-      <button class="dockBtn" id="btnGest">Gestures</button>
-      <button class="dockBtn" id="btnAR">AR Tools</button>
-      <button class="dockBtn" id="btnZoomReset">Zoom Reset</button>
     </div>
 
-    <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true">
+    <div id="sheet" class="sheet hidden">
       <div class="sheetCard">
         <div class="sheetTitle">Enable Pocket Vision HUD</div>
         <div class="sheetText">
-          Camera + optional AI + optional motion + optional hand gestures.
+          This runs in Safari using your camera + optional motion + optional hand gestures.
           iOS will ask for permissions.
           <br /><br />
           Tips:
           <ul style="margin:8px 0 0 18px; padding:0; color:rgba(255,255,255,0.7);">
             <li>Use good light</li>
-            <li>Keep your full hand visible for gestures</li>
-            <li>Pinch in empty space = zoom (if supported)</li>
+            <li>Keep your hand fully visible</li>
+            <li>Turn on AI for object selection highlight</li>
           </ul>
         </div>
 
@@ -58,8 +56,8 @@
         </div>
 
         <div class="sheetFoot">
-          Note: Mobile Safari doesn’t expose full world-anchored AR like native ARKit.
-          This app simulates “AR UI” using camera + overlays + motion + vision.
+          Note: iPhone Safari does not expose full LiDAR world mesh + anchored AR UI like Apple Vision.
+          This uses camera + on-device ML + motion/gesture overlays.
         </div>
       </div>
     </div>
