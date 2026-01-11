@@ -1,6 +1,6 @@
-let zTop = 20;
+let zTop = 40;
 
-export function createPanel({ title, x = 16, y = 120, w = 340, h = 260, bodyHTML = "" }) {
+export function createPanel({ title, x = 12, y = 120, w = 340, h = 260, bodyHTML = "" }) {
   const el = document.createElement("div");
   el.className = "panel";
   el.style.left = `${x}px`;
@@ -13,8 +13,8 @@ export function createPanel({ title, x = 16, y = 120, w = 340, h = 260, bodyHTML
     <div class="panelHeader">
       <div class="panelTitle">${escapeHtml(title)}</div>
       <div class="panelBtns">
-        <button class="panelBtn" data-act="min">—</button>
-        <button class="panelBtn" data-act="close">✕</button>
+        <button class="panelBtn" data-act="min" aria-label="Minimize">—</button>
+        <button class="panelBtn" data-act="close" aria-label="Close">✕</button>
       </div>
     </div>
     <div class="panelBody">${bodyHTML}</div>
@@ -28,7 +28,7 @@ export function createPanel({ title, x = 16, y = 120, w = 340, h = 260, bodyHTML
     el.style.zIndex = String(zTop++);
   });
 
-  // Drag
+  // Drag by header with finger (gesture pinch also supported separately)
   let dragging = false;
   let startX = 0, startY = 0;
   let originL = 0, originT = 0;
@@ -48,7 +48,7 @@ export function createPanel({ title, x = 16, y = 120, w = 340, h = 260, bodyHTML
     const dy = e.clientY - startY;
 
     const nextL = clamp(originL + dx, 8, window.innerWidth - el.offsetWidth - 8);
-    const nextT = clamp(originT + dy, 8 + safeTop(), window.innerHeight - el.offsetHeight - (safeBottom() + 80));
+    const nextT = clamp(originT + dy, 8, window.innerHeight - el.offsetHeight - 90);
     el.style.left = `${nextL}px`;
     el.style.top = `${nextT}px`;
   });
@@ -71,8 +71,7 @@ export function createPanel({ title, x = 16, y = 120, w = 340, h = 260, bodyHTML
 }
 
 export function setPanelBody(panelEl, html) {
-  const body = panelEl.querySelector(".panelBody");
-  body.innerHTML = html;
+  panelEl.querySelector(".panelBody").innerHTML = html;
 }
 
 export function getPanelBody(panelEl) {
@@ -80,14 +79,6 @@ export function getPanelBody(panelEl) {
 }
 
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-
-function safeTop() {
-  // rough safe area approximation for iOS
-  return 0;
-}
-function safeBottom() {
-  return 0;
-}
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (m) => ({
