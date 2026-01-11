@@ -1,5 +1,5 @@
-/* sw.js — GitHub Pages safe cache (FIXED PATHS) */
-const CACHE_VERSION = "pvh-v1.0.2"; // bump this any time you change files
+/* sw.js — GitHub Pages cache (FIXED PATHS) */
+const CACHE_VERSION = "pvh-v1.0.3";
 
 const APP_SHELL = [
   "./",
@@ -10,6 +10,7 @@ const APP_SHELL = [
   "./js/storage.js",
   "./js/ui.js",
   "./js/vision.js",
+  "./js/gestures.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png"
@@ -34,13 +35,11 @@ self.addEventListener("fetch", (event) => {
 
   if (url.origin !== self.location.origin) return;
 
-  // HTML: network-first
   if (req.mode === "navigate" || (req.headers.get("accept") || "").includes("text/html")) {
     event.respondWith(networkFirst(req));
     return;
   }
 
-  // Assets: cache-first
   event.respondWith(cacheFirst(req));
 });
 
