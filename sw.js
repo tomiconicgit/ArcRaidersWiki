@@ -1,5 +1,5 @@
-/* sw.js — GitHub Pages cache (FIXED PATHS) */
-const CACHE_VERSION = "pvh-v1.0.3";
+/* sw.js — GitHub Pages cache (less sticky, easier updates) */
+const CACHE_VERSION = "pvh-v1.0.4";
 
 const APP_SHELL = [
   "./",
@@ -35,7 +35,14 @@ self.addEventListener("fetch", (event) => {
 
   if (url.origin !== self.location.origin) return;
 
-  if (req.mode === "navigate" || (req.headers.get("accept") || "").includes("text/html")) {
+  const accept = req.headers.get("accept") || "";
+  const isHTML = req.mode === "navigate" || accept.includes("text/html");
+  const isAsset = req.destination === "script" || req.destination === "style";
+
+  // Make updates show up fast:
+  // - HTML + JS + CSS => network-first
+  // - images/icons => cache-first
+  if (isHTML || isAsset) {
     event.respondWith(networkFirst(req));
     return;
   }
