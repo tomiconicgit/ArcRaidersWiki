@@ -6,11 +6,6 @@
   --text: rgba(255,255,255,0.92);
   --muted: rgba(255,255,255,0.65);
   --good: rgba(68, 255, 175, 0.9);
-  --warn: rgba(255, 210, 93, 0.9);
-  --bad: rgba(255, 92, 116, 0.9);
-
-  /* fallback HUD scaling if camera zoom isn’t supported */
-  --hudScale: 1;
 }
 
 *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
@@ -33,7 +28,7 @@ html,body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-
   pointer-events:none;
 }
 
-/* Top HUD chips */
+/* HUD */
 .hud{
   position:absolute;
   top: calc(env(safe-area-inset-top) + 10px);
@@ -43,8 +38,6 @@ html,body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-
   gap:6px;
   flex-wrap:wrap;
   z-index: 5;
-  transform-origin: top left;
-  transform: scale(var(--hudScale));
 }
 
 .chip{
@@ -58,7 +51,7 @@ html,body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-
   color: var(--text);
 }
 
-/* Bottom dock - portrait contained, scrollable */
+/* Dock - portrait friendly */
 .dock{
   position:absolute;
   left: 12px;
@@ -66,35 +59,28 @@ html,body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-
   bottom: calc(env(safe-area-inset-bottom) + 12px);
   z-index: 6;
 
-  display:flex;
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  padding: 10px;
 
   background: rgba(10, 14, 20, 0.25);
   border: 1px solid rgba(255,255,255,0.08);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border-radius: 16px;
-
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-
-  transform-origin: bottom left;
-  transform: scale(var(--hudScale));
+  padding: 10px;
 }
 
-.dock::-webkit-scrollbar{ display:none; }
+@media (min-width: 430px){
+  .dock{ grid-template-columns: repeat(6, 1fr); }
+}
 
 .dockBtn{
-  flex: 0 0 auto;
-  min-width: 96px;
-
   border: 1px solid rgba(255,255,255,0.10);
   background: rgba(18,24,33,0.35);
   color: var(--text);
   border-radius: 14px;
-  padding: 10px 10px;
+  padding: 10px 8px;
   font-weight: 800;
   font-size: 12px;
 }
@@ -194,7 +180,6 @@ html,body{ height:100%; margin:0; background:var(--bg); color:var(--text); font-
   -webkit-overflow-scrolling: touch;
 }
 
-/* Resize hint corner */
 .panel::after{
   content:"";
   position:absolute;
