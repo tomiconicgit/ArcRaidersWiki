@@ -1,269 +1,297 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#000000" />
-  <title>HUD Vision Prototype</title>
-  <style>
-    :root {
-      --padL: max(12px, env(safe-area-inset-left));
-      --padR: max(12px, env(safe-area-inset-right));
-      --padT: max(12px, env(safe-area-inset-top));
-      --padB: max(12px, env(safe-area-inset-bottom));
-      --hud: rgba(0, 255, 220, 0.95);
-      --hudSoft: rgba(0, 255, 220, 0.55);
-      --glass: rgba(0, 0, 0, 0.45);
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>iGlass OS v1.0</title>
+    
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
 
-    html, body {
-      margin: 0;
-      height: 100%;
-      background: #000;
-      color: white;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-      overscroll-behavior: none;
-      -webkit-tap-highlight-color: transparent;
-    }
+    <style>
+        /* --- 1. THE OS AESTHETIC (Glassmorphism) --- */
+        :root {
+            --glass-bg: rgba(20, 20, 25, 0.4);
+            --glass-border: rgba(255, 255, 255, 0.2);
+            --neon-blue: #00f3ff;
+            --neon-alert: #ff0055;
+        }
 
-    #app {
-      position: fixed;
-      inset: 0;
-      overflow: hidden;
-      background: #000;
-    }
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #000; /* Fallback */
+        }
 
-    #stage {
-      position: absolute;
-      inset: 0;
-    }
+        /* The Camera Feed Background */
+        #camera-feed {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: -2;
+        }
 
-    video {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      background: #000;
-      transform: none;
-    }
-    /* Only mirror for front camera if we toggle this class */
-    #stage.mirror video { transform: scaleX(-1); }
+        /* The 3D Layer (Transparent) */
+        #ar-scene {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none; /* Let touches pass through to HUD */
+        }
 
-    canvas#hud {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      touch-action: manipulation;
-      pointer-events: auto;
-    }
+        /* --- 2. THE HUD (Heads Up Display) --- */
+        .hud-layer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none; /* Allow clicks only on buttons */
+            box-sizing: border-box;
+            padding: 20px;
+        }
 
-    #topbar {
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: 0;
-      padding: calc(var(--padT) + 10px) var(--padR) 10px var(--padL);
-      display: flex;
-      gap: 10px;
-      align-items: flex-start;
-      justify-content: space-between;
-      pointer-events: none;
-    }
+        /* Top Bar */
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            color: var(--neon-blue);
+            text-shadow: 0 0 10px var(--neon-blue);
+            font-weight: bold;
+            font-size: 14px;
+        }
 
-    .status {
-      pointer-events: none;
-      background: linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0.15));
-      border: 1px solid rgba(0,255,220,0.16);
-      padding: 10px 12px;
-      border-radius: 12px;
-      max-width: 72vw;
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-    }
+        /* The Reticle (Your "Gaze" Cursor) */
+        .reticle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(255,255,255,0.5);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 15px rgba(0, 243, 255, 0.3);
+            transition: all 0.2s ease;
+        }
+        .reticle.active {
+            border-color: var(--neon-alert);
+            transform: translate(-50%, -50%) scale(0.8);
+        }
 
-    .status .line1 {
-      font-size: 12px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--hudSoft);
-    }
+        /* Bottom Controls */
+        .controls {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            pointer-events: auto; /* Re-enable clicks here */
+        }
 
-    .status .line2 {
-      margin-top: 6px;
-      font-size: 14px;
-      color: rgba(255,255,255,0.95);
-      line-height: 1.3;
-    }
+        .btn {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 30px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            font-family: inherit;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
 
-    #controls {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      padding: 12px var(--padR) calc(var(--padB) + 12px) var(--padL);
-      display: flex;
-      gap: 10px;
-      justify-content: space-between;
-      align-items: center;
-      pointer-events: none;
-    }
+        .btn:active {
+            background: var(--neon-blue);
+            color: black;
+        }
 
-    .btnrow {
-      display: flex;
-      gap: 10px;
-      pointer-events: auto;
-    }
+        /* Hidden File Input */
+        #file-input {
+            display: none;
+        }
 
-    button {
-      border: 1px solid rgba(0,255,220,0.25);
-      background: rgba(0,0,0,0.55);
-      color: white;
-      padding: 12px 14px;
-      border-radius: 14px;
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      user-select: none;
-    }
-    button:active { transform: translateY(1px); }
-    button[data-on="true"] {
-      border-color: rgba(0,255,220,0.65);
-      box-shadow: 0 0 0 2px rgba(0,255,220,0.10) inset;
-    }
-
-    #gallery {
-      position: absolute;
-      right: var(--padR);
-      bottom: calc(var(--padB) + 78px);
-      width: min(44vw, 220px);
-      display: grid;
-      gap: 8px;
-      pointer-events: auto;
-      z-index: 20;
-    }
-
-    .shot {
-      border: 1px solid rgba(0,255,220,0.18);
-      border-radius: 12px;
-      overflow: hidden;
-      background: rgba(0,0,0,0.35);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-    }
-    .shot img { display: block; width: 100%; height: auto; }
-
-    /* Hologram panel */
-    #holoPanel {
-      position: absolute;
-      left: var(--padL);
-      right: var(--padR);
-      bottom: calc(var(--padB) + 86px);
-      height: min(40vh, 320px);
-      border-radius: 18px;
-      overflow: hidden;
-      border: 1px solid rgba(0,255,220,0.18);
-      background: linear-gradient(180deg, rgba(0,0,0,0.68), rgba(0,0,0,0.28));
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      transform: translateY(18px);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 180ms ease, transform 180ms ease;
-      z-index: 15;
-    }
-    #holoPanel.on {
-      opacity: 1;
-      transform: translateY(0px);
-      pointer-events: auto;
-    }
-
-    #holoHeader {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px 12px;
-      border-bottom: 1px solid rgba(0,255,220,0.12);
-    }
-
-    #holoTitle {
-      font-size: 12px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--hudSoft);
-      font-weight: 800;
-    }
-    #holoMeta {
-      font-size: 12px;
-      color: rgba(255,255,255,0.85);
-      font-weight: 700;
-    }
-
-    #holoCanvasWrap {
-      position: relative;
-      width: 100%;
-      height: calc(100% - 44px);
-    }
-
-    #holoCanvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-
-    #holoClose {
-      border-radius: 12px;
-      padding: 8px 10px;
-      font-size: 13px;
-    }
-  </style>
+        /* Loading Overlay */
+        #loading {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #000;
+            color: var(--neon-blue);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+            flex-direction: column;
+        }
+    </style>
 </head>
-
 <body>
-  <div id="app">
-    <div id="stage">
-      <video id="video" playsinline muted></video>
-      <canvas id="hud"></canvas>
+
+    <div id="loading">
+        <p>INITIALIZING OPTICS...</p>
+        <small>Please Allow Camera Access</small>
     </div>
 
-    <div id="topbar">
-      <div class="status">
-        <div class="line1">HUD / VISION PROTOTYPE</div>
-        <div class="line2" id="statusText">Tap <b>Start</b> to enable camera.</div>
-      </div>
-    </div>
+    <video id="camera-feed" autoplay playsinline muted></video>
 
-    <div id="holoPanel" aria-hidden="true">
-      <div id="holoHeader">
-        <div>
-          <div id="holoTitle">HOLOGRAM</div>
-          <div id="holoMeta">Tap an object while Scan is ON</div>
+    <div class="hud-layer">
+        <div class="top-bar">
+            <span id="clock">00:00</span>
+            <span>SYS: NORMAL</span>
+            <span>BAT: 98%</span>
         </div>
-        <button id="holoClose">Close</button>
-      </div>
-      <div id="holoCanvasWrap">
-        <canvas id="holoCanvas"></canvas>
-      </div>
+        
+        <div class="reticle" id="reticle"></div>
+
+        <div class="controls">
+            <button class="btn" onclick="document.getElementById('file-input').click()">
+                📂 Load Data
+            </button>
+            <button class="btn" onclick="resetFloatingContent()">
+                ⟳ Reset
+            </button>
+        </div>
     </div>
 
-    <div id="gallery"></div>
+    <input type="file" id="file-input" accept="image/*" onchange="handleFileUpload(this)">
 
-    <div id="controls">
-      <div class="btnrow">
-        <button id="btnStart">Start</button>
-        <button id="btnFlip">Flip Cam</button>
-        <button id="btnScan" data-on="false">Scan</button>
-      </div>
-      <div class="btnrow">
-        <button id="btnSnap">Snapshot</button>
-        <button id="btnClear">Clear</button>
-      </div>
-    </div>
-  </div>
+    <a-scene embedded vr-mode-ui="enabled: false" id="ar-scene" renderer="alpha: true">
+        
+        <a-light type="ambient" intensity="1"></a-light>
+        <a-light type="directional" position="-1 2 1"></a-light>
 
-  <script type="module" src="./js/main.js"></script>
+        <a-entity camera look-controls="touchEnabled: false; mouseEnabled: false">
+            </a-entity>
+
+        <a-entity id="content-anchor" position="0 0 -3">
+            
+            <a-plane id="display-plane" 
+                     position="0 0 0" 
+                     width="2" height="1.5" 
+                     color="#000" 
+                     material="opacity: 0.6; transparent: true; side: double"
+                     border="color: #00f3ff">
+                
+                <a-text value="WAITING FOR DATA INPUT..." 
+                        align="center" 
+                        color="#00f3ff"
+                        width="4">
+                </a-text>
+
+                <a-box position="0 0.8 0" width="2.1" height="0.05" depth="0.05" color="#00f3ff"></a-box>
+                <a-box position="0 -0.8 0" width="2.1" height="0.05" depth="0.05" color="#00f3ff"></a-box>
+            </a-plane>
+
+        </a-entity>
+
+    </a-scene>
+
+    <script>
+        // --- 1. Camera Setup (The "Eyes") ---
+        async function startCamera() {
+            const video = document.getElementById('camera-feed');
+            const loading = document.getElementById('loading');
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'environment', // Use back camera
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                });
+                video.srcObject = stream;
+                loading.style.display = 'none';
+            } catch (err) {
+                loading.innerHTML = "<p>CAMERA ACCESS DENIED</p><small>Check Settings > Safari</small>";
+                console.error("Camera Error:", err);
+            }
+        }
+
+        // --- 2. Clock & HUD Logic ---
+        function updateHUD() {
+            const now = new Date();
+            document.getElementById('clock').innerText = 
+                now.toLocaleTimeString('en-US', { hour12: false });
+        }
+        setInterval(updateHUD, 1000);
+
+        // --- 3. Interaction: File Upload (The "Safari" Viewer) ---
+        function handleFileUpload(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const imgUrl = e.target.result;
+                update3DDisplay(imgUrl);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function update3DDisplay(url) {
+            const plane = document.getElementById('display-plane');
+            
+            // Remove old text
+            plane.innerHTML = ''; 
+
+            // Update Texture
+            plane.setAttribute('src', url);
+            plane.setAttribute('material', 'color: #fff; opacity: 1');
+            
+            // Add a simple animation to show it "loaded"
+            plane.setAttribute('animation', 'property: scale; from: 0 0 0; to: 1 1 1; dur: 500; easing: easeOutElastic');
+            
+            // Re-add borders (visual flair)
+            const topBorder = document.createElement('a-box');
+            topBorder.setAttribute('position', '0 0.8 0');
+            topBorder.setAttribute('width', '2.1');
+            topBorder.setAttribute('height', '0.05');
+            topBorder.setAttribute('depth', '0.05');
+            topBorder.setAttribute('color', '#00f3ff');
+            plane.appendChild(topBorder);
+
+            const btmBorder = document.createElement('a-box');
+            btmBorder.setAttribute('position', '0 -0.8 0');
+            btmBorder.setAttribute('width', '2.1');
+            btmBorder.setAttribute('height', '0.05');
+            btmBorder.setAttribute('depth', '0.05');
+            btmBorder.setAttribute('color', '#00f3ff');
+            plane.appendChild(btmBorder);
+        }
+
+        function resetFloatingContent() {
+            const anchor = document.getElementById('content-anchor');
+            // Reset position to "in front of user"
+            anchor.setAttribute('rotation', '0 0 0');
+            // In a full AR app, we'd recalculate camera forward vector
+            // Here we just reload the page for a clean slate
+            window.location.reload();
+        }
+
+        // --- 4. Simulated "Gesture" Interaction ---
+        // On mobile, "touch" is the most reliable "gesture"
+        document.addEventListener('touchstart', () => {
+            document.getElementById('reticle').classList.add('active');
+        });
+        document.addEventListener('touchend', () => {
+            document.getElementById('reticle').classList.remove('active');
+        });
+
+        // Initialize
+        window.addEventListener('load', startCamera);
+
+    </script>
 </body>
 </html>
