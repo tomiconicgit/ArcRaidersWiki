@@ -24,6 +24,7 @@
       <div class="chip" id="hudPitch">Pitch: --°</div>
       <div class="chip" id="hudGestures">Gestures: Off</div>
       <div class="chip" id="hudSelect">Selected: —</div>
+      <div class="chip" id="hudMode">Mode: Live</div>
     </div>
 
     <div id="dock" class="dock">
@@ -35,18 +36,25 @@
       <button class="dockBtn" id="btnPanels">Panels</button>
     </div>
 
+    <!-- Radial Tool Wheel -->
+    <div id="toolWheel" class="wheel hidden" aria-hidden="true">
+      <button class="wheelItem" data-tool="snap">Snap</button>
+      <button class="wheelItem" data-tool="freeze">Freeze</button>
+      <button class="wheelItem" data-tool="clear">Clear</button>
+      <button class="wheelItem" data-tool="gallery">Gallery</button>
+    </div>
+
     <div id="sheet" class="sheet hidden">
       <div class="sheetCard">
         <div class="sheetTitle">Enable Pocket Vision HUD</div>
         <div class="sheetText">
-          This runs in Safari using your camera + optional motion + optional hand gestures.
-          iOS will ask for permissions.
+          Use AI + hand gestures for selection and snapping.
           <br /><br />
-          Tips:
+          Gesture tips:
           <ul style="margin:8px 0 0 18px; padding:0; color:rgba(255,255,255,0.7);">
-            <li>Use good light</li>
-            <li>Keep your hand fully visible</li>
-            <li>Turn on AI for object selection highlight</li>
+            <li><b>Move finger</b> → selects nearest AI box</li>
+            <li><b>Pinch</b> → snaps selected object</li>
+            <li><b>Open palm</b> → radial tool wheel</li>
           </ul>
         </div>
 
@@ -56,8 +64,7 @@
         </div>
 
         <div class="sheetFoot">
-          Note: iPhone Safari does not expose full LiDAR world mesh + anchored AR UI like Apple Vision.
-          This uses camera + on-device ML + motion/gesture overlays.
+          Note: Safari doesn’t give full world-anchored AR. This is “camera + AI + gestures” style HUD.
         </div>
       </div>
     </div>
